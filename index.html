@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Don Perfumes RD | Etiquetas 4x6</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <section class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">DON PERFUMES RD</p>
+          <h1>Etiquetas de envío</h1>
+        </div>
+        <div class="sync-pill" id="syncStatus">Historial local activo</div>
+      </header>
+
+      <section class="catalog-panel">
+        <div class="section-heading">
+          <h2>Catalogo de Productos</h2>
+          <button class="secondary-btn" type="button" id="cancelCatalogEditBtn">Limpiar</button>
+        </div>
+        <form class="catalog-form" id="catalogForm">
+          <input type="hidden" id="catalogProductId">
+          <label class="catalog-name">
+            <span>Nombre del producto</span>
+            <input id="catalogProductName" required>
+          </label>
+          <label>
+            <span>5ml</span>
+            <input id="price5ml" type="number" min="0" step="1" required>
+          </label>
+          <label>
+            <span>15ml</span>
+            <input id="price15ml" type="number" min="0" step="1" required>
+          </label>
+          <label>
+            <span>60ml</span>
+            <input id="price60ml" type="number" min="0" step="1" required>
+          </label>
+          <label>
+            <span>120ml</span>
+            <input id="price120ml" type="number" min="0" step="1" required>
+          </label>
+          <button class="primary-btn" type="submit" id="saveCatalogBtn">Guardar producto</button>
+        </form>
+        <div class="import-box">
+          <div class="section-heading compact-heading">
+            <h3>Importacion masiva desde Google Sheets</h3>
+          </div>
+          <form class="import-form" id="importCatalogForm">
+            <label class="wide">
+              <span>URL CSV de Google Sheets</span>
+              <input id="catalogCsvUrl" placeholder="Pega aqui el enlace CSV publicado o exportado">
+            </label>
+            <label class="wide">
+              <span>O pega el contenido CSV</span>
+              <textarea id="catalogCsvText" rows="4" placeholder="producto,5ml,15ml,60ml,120ml,activo"></textarea>
+            </label>
+            <button class="secondary-btn" type="submit">Importar productos</button>
+            <p class="import-help" id="importStatus">Columnas esperadas: producto, 5ml, 15ml, 60ml, 120ml, activo.</p>
+          </form>
+        </div>
+        <div class="catalog-list" id="catalogList"></div>
+      </section>
+
+      <form class="order-form" id="orderForm">
+        <section class="form-section">
+          <div class="section-heading">
+            <h2>Cliente</h2>
+          </div>
+          <div class="field-grid">
+            <label>
+              <span>Nombre del cliente</span>
+              <input id="customerName" name="customerName" autocomplete="name" required>
+            </label>
+            <label>
+              <span>Teléfono</span>
+              <input id="phone" name="phone" inputmode="tel" autocomplete="tel" required>
+            </label>
+            <label class="wide">
+              <span>Dirección completa</span>
+              <textarea id="address" name="address" rows="3" required></textarea>
+            </label>
+            <label>
+              <span>Provincia</span>
+              <input id="province" name="province" required>
+            </label>
+            <label>
+              <span>Ciudad / sector</span>
+              <input id="city" name="city" required>
+            </label>
+            <label class="wide">
+              <span>Referencia de ubicación</span>
+              <input id="reference" name="reference">
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-heading products-heading">
+            <h2>Pedido</h2>
+            <button class="secondary-btn" type="button" id="addProductBtn">+ Producto</button>
+          </div>
+          <div class="products-list" id="productsList"></div>
+          <div class="total-strip">
+            <span>Total automático</span>
+            <strong id="orderTotal">RD$0</strong>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-heading">
+            <h2>Envío y pago</h2>
+          </div>
+          <div class="field-grid">
+            <label>
+              <span>Método de pago</span>
+              <select id="paymentMethod" name="paymentMethod">
+                <option value="Pago contra entrega">Pago contra entrega</option>
+                <option value="Pagado">Pagado</option>
+              </select>
+            </label>
+            <label>
+              <span>Empresa de envío</span>
+              <input id="shippingCompany" name="shippingCompany" required>
+            </label>
+            <label>
+              <span>Codigo de pedido</span>
+              <input id="orderNumber" name="orderNumber" readonly required>
+            </label>
+            <label class="wide">
+              <span>Nota del pedido</span>
+              <textarea id="orderNote" name="orderNote" rows="3"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <div class="action-bar">
+          <button class="primary-btn" type="submit">Generar etiqueta</button>
+          <button class="ghost-btn" type="button" id="newOrderBtn">Nuevo pedido</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="side-panel">
+      <section class="label-card">
+        <div class="label-preview" id="labelPreview">
+          <div class="label-top">
+            <div class="label-logo">
+              <div class="logo-mark">DP</div>
+              <div>
+                <h2>DON PERFUMES RD</h2>
+                <p>PEDIDO <span id="previewOrder">DP-00001</span></p>
+              </div>
+            </div>
+          </div>
+          <div class="label-block">
+            <h3>Cliente:</h3>
+            <p id="previewName">Nombre</p>
+            <p id="previewPhone">Teléfono</p>
+          </div>
+          <div class="label-block">
+            <h3>Dirección:</h3>
+            <p id="previewAddress">Dirección completa</p>
+            <p id="previewCity">Ciudad / provincia</p>
+            <p id="previewReference">Referencia</p>
+          </div>
+          <div class="label-block">
+            <h3>Pedido:</h3>
+            <div id="previewItems"></div>
+          </div>
+          <div class="collect-box">
+            <span>Total a cobrar:</span>
+            <strong id="previewTotal">RD$0</strong>
+          </div>
+          <div class="label-footer-grid">
+            <div class="label-block note-block">
+              <h3>Metodo de pago:</h3>
+              <p id="previewPayment">Pago contra entrega</p>
+              <h3>Nota:</h3>
+              <p id="previewNote">Observacion</p>
+            </div>
+            <div class="qr-box">
+              <canvas id="previewQr" width="116" height="116" aria-label="Codigo QR del pedido"></canvas>
+              <span>QR pedido</span>
+            </div>
+          </div>
+        </div>
+        <div class="label-actions">
+          <button class="primary-btn" type="button" id="downloadPdfBtn">Descargar PDF 4x6</button>
+          <button class="whatsapp-btn" type="button" id="sendWhatsappBtn">Enviar a WhatsApp</button>
+          <button class="secondary-btn" type="button" id="printBtn">Imprimir</button>
+        </div>
+      </section>
+
+      <section class="history-panel">
+        <div class="section-heading">
+          <h2>Historial de pedidos</h2>
+        </div>
+        <div class="history-filters">
+          <label>
+            <span>Buscar por nombre</span>
+            <input id="searchByName" placeholder="Nombre del cliente">
+          </label>
+          <label>
+            <span>Buscar por telefono</span>
+            <input id="searchByPhone" inputmode="tel" placeholder="Telefono">
+          </label>
+          <label>
+            <span>Buscar por pedido</span>
+            <input id="searchByOrder" placeholder="DP-00001">
+          </label>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+    </aside>
+  </main>
+</body>
+</html>
