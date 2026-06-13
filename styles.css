@@ -90,6 +90,7 @@ h2 {
 }
 
 .catalog-panel,
+.sheets-panel,
 .order-form,
 .label-card,
 .history-panel {
@@ -100,8 +101,14 @@ h2 {
 }
 
 .catalog-panel,
+.sheets-panel,
 .order-form {
   overflow: hidden;
+}
+
+.sheets-panel {
+  margin-bottom: 16px;
+  padding: 18px;
 }
 
 .catalog-panel {
@@ -136,6 +143,13 @@ h2 {
 .catalog-form {
   display: grid;
   grid-template-columns: minmax(180px, 1.6fr) repeat(4, minmax(88px, 0.7fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.sheets-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
   gap: 10px;
   align-items: end;
 }
@@ -573,6 +587,7 @@ textarea {
 
   .topbar,
   .field-grid,
+  .sheets-form,
   .catalog-form,
   .import-form,
   .catalog-item,

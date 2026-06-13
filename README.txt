@@ -36,8 +36,17 @@ Google Sheets:
 2. Ve a Extensiones > Apps Script.
 3. Pega el contenido de google-apps-script.gs.
 4. Despliega como Web App.
-5. Copia la URL del despliegue.
-6. Pega esa URL en app.js, en la constante GOOGLE_SHEETS_WEB_APP_URL.
+5. En "Ejecutar como", elige tu usuario.
+6. En "Quien tiene acceso", elige cualquiera con el enlace.
+7. Copia la URL del despliegue.
+8. Abre la app y pega esa URL en "Conexion Google Sheets".
+9. Pulsa Guardar URL y luego Sincronizar.
+
+Cuando Google Sheets este conectado:
+- Los pedidos se guardan automaticamente en la hoja Pedidos.
+- El catalogo de productos se guarda automaticamente en la hoja Productos.
+- El historial y el catalogo se cargan desde Google Sheets al abrir la app.
+- Si no hay conexion o no se ha pegado URL, la app sigue usando almacenamiento local.
 
 Notas:
 - Aunque no conectes Google Sheets, el historial funciona localmente en el navegador.

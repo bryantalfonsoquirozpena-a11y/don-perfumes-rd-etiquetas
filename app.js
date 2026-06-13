@@ -1,6 +1,6 @@
 const SIZES = ["5ml", "15ml", "60ml", "120ml"];
 
-// Pega aqui la URL de tu Apps Script desplegado como Web App.
+// Puedes dejarlo vacio y pegar la URL desde la pantalla de la app.
 const GOOGLE_SHEETS_WEB_APP_URL = "";
 
 const state = {
@@ -21,6 +21,9 @@ const searchByPhone = document.querySelector("#searchByPhone");
 const searchByOrder = document.querySelector("#searchByOrder");
 const historyList = document.querySelector("#historyList");
 const syncStatus = document.querySelector("#syncStatus");
+const sheetsUrlInput = document.querySelector("#sheetsUrl");
+const saveSheetsUrlBtn = document.querySelector("#saveSheetsUrlBtn");
+const syncSheetsBtn = document.querySelector("#syncSheetsBtn");
 const catalogForm = document.querySelector("#catalogForm");
 const catalogList = document.querySelector("#catalogList");
 const cancelCatalogEditBtn = document.querySelector("#cancelCatalogEditBtn");
@@ -75,6 +78,96 @@ function saveOrders() {
 
 function saveCatalog() {
   localStorage.setItem("donPerfumesCatalog", JSON.stringify(state.catalog));
+}
+
+function sheetsUrl() {
+  return localStorage.getItem("donPerfumesSheetsUrl") || GOOGLE_SHEETS_WEB_APP_URL;
+}
+
+function setSheetsStatus(message) {
+  syncStatus.textContent = message;
+}
+
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const callback = `donPerfumesCallback_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const script = document.createElement("script");
+    const separator = url.includes("?") ? "&" : "?";
+
+    window[callback] = data => {
+      delete window[callback];
+      script.remove();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      delete window[callback];
+      script.remove();
+      reject(new Error("No se pudo cargar Google Sheets."));
+    };
+
+    script.src = `${url}${separator}callback=${callback}`;
+    document.body.appendChild(script);
+  });
+}
+
+async function loadFromGoogleSheets() {
+  const url = sheetsUrl();
+  if (!url) {
+    setSheetsStatus("Historial local activo");
+    return;
+  }
+
+  setSheetsStatus("Cargando desde Google Sheets...");
+  try {
+    const data = await jsonp(`${url}?action=read`);
+    state.orders = Array.isArray(data.orders) ? data.orders : [];
+    state.catalog = Array.isArray(data.catalog) ? data.catalog : [];
+    saveOrders();
+    saveCatalog();
+    renderCatalog();
+    refreshOrderProductOptions();
+    renderHistory();
+    resetForm();
+    setSheetsStatus("Sincronizado con Google Sheets");
+  } catch (error) {
+    setSheetsStatus("No se pudo leer Sheets; usando datos locales");
+  }
+}
+
+async function postToGoogleSheets(payload, statusMessage) {
+  const url = sheetsUrl();
+  if (!url) {
+    setSheetsStatus("Guardado localmente");
+    return;
+  }
+
+  setSheetsStatus(statusMessage);
+  try {
+    await fetch(url, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    });
+    setSheetsStatus("Guardado en Google Sheets");
+  } catch (error) {
+    setSheetsStatus("Guardado local, Sheets pendiente");
+  }
+}
+
+function syncCatalogToSheets() {
+  postToGoogleSheets({
+    resource: "catalog",
+    catalog: state.catalog
+  }, "Guardando catalogo en Sheets...");
+}
+
+function syncOrderToSheets(order) {
+  return postToGoogleSheets({
+    resource: "order",
+    order
+  }, "Guardando pedido en Sheets...");
 }
 
 function normalizeKey(value) {
@@ -231,6 +324,7 @@ function importCatalogProducts(products) {
   saveCatalog();
   renderCatalog();
   refreshOrderProductOptions();
+  syncCatalogToSheets();
   return { created, updated };
 }
 
@@ -624,26 +718,6 @@ function renderHistory() {
   });
 }
 
-async function syncToGoogleSheets(order) {
-  if (!GOOGLE_SHEETS_WEB_APP_URL) {
-    syncStatus.textContent = "Guardado localmente";
-    return;
-  }
-
-  syncStatus.textContent = "Enviando a Google Sheets...";
-  try {
-    await fetch(GOOGLE_SHEETS_WEB_APP_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(order)
-    });
-    syncStatus.textContent = "Guardado en Sheets";
-  } catch (error) {
-    syncStatus.textContent = "Guardado local, Sheets pendiente";
-  }
-}
-
 function upsertOrder(order) {
   if (isDuplicateOrderNumber(order)) {
     order.orderNumber = nextOrderNumber();
@@ -686,7 +760,7 @@ function resetForm() {
   productsList.innerHTML = "";
   productRowTemplate();
   updateTotals();
-  syncStatus.textContent = GOOGLE_SHEETS_WEB_APP_URL ? "Sheets configurado" : "Historial local activo";
+  syncStatus.textContent = sheetsUrl() ? "Sheets configurado" : "Historial local activo";
 }
 
 function pdfEscape(value) {
@@ -881,6 +955,7 @@ catalogForm.addEventListener("submit", event => {
   resetCatalogForm();
   renderCatalog();
   refreshOrderProductOptions();
+  syncCatalogToSheets();
 });
 
 importCatalogForm.addEventListener("submit", async event => {
@@ -938,6 +1013,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
+    syncCatalogToSheets();
   }
 
   if (event.target.classList.contains("delete-catalog")) {
@@ -945,6 +1021,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
+    syncCatalogToSheets();
   }
 });
 
@@ -977,7 +1054,7 @@ form.addEventListener("submit", async event => {
   const order = readFormOrder();
   upsertOrder(order);
   updatePreview();
-  await syncToGoogleSheets(order);
+  await syncOrderToSheets(order);
   generatePdf();
 });
 
@@ -990,6 +1067,12 @@ printBtn.addEventListener("click", () => window.print());
   input.addEventListener("input", renderHistory);
 });
 cancelCatalogEditBtn.addEventListener("click", resetCatalogForm);
+saveSheetsUrlBtn.addEventListener("click", () => {
+  localStorage.setItem("donPerfumesSheetsUrl", sheetsUrlInput.value.trim());
+  setSheetsStatus("URL de Sheets guardada");
+  loadFromGoogleSheets();
+});
+syncSheetsBtn.addEventListener("click", loadFromGoogleSheets);
 
 historyList.addEventListener("click", event => {
   const button = event.target.closest("button[data-id]");
@@ -1005,6 +1088,8 @@ historyList.addEventListener("click", event => {
   }
 });
 
+sheetsUrlInput.value = sheetsUrl();
 renderCatalog();
 resetForm();
 renderHistory();
+if (sheetsUrl()) loadFromGoogleSheets();
