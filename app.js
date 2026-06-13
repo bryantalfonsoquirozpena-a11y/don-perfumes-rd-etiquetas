@@ -146,13 +146,8 @@ async function loadFromGoogleSheets() {
   setSheetsStatus("Cargando desde Google Sheets...");
   try {
     const data = await jsonp(`${url}?action=read`);
-    const remoteOrders = Array.isArray(data.orders) ? data.orders : [];
-    const remoteCatalog = Array.isArray(data.catalog) ? data.catalog : [];
-    const hadLocalOrders = state.orders.length > 0;
-    const hadLocalCatalog = state.catalog.length > 0;
-
-    state.orders = mergeById(state.orders, remoteOrders);
-    state.catalog = mergeById(state.catalog, remoteCatalog);
+    state.orders = Array.isArray(data.orders) ? data.orders : [];
+    state.catalog = Array.isArray(data.catalog) ? data.catalog : [];
     saveOrders();
     saveCatalog();
     renderCatalog();
@@ -160,27 +155,9 @@ async function loadFromGoogleSheets() {
     renderHistory();
     resetForm();
     setSheetsStatus("Sincronizado con Google Sheets");
-
-    if (!remoteOrders.length && hadLocalOrders) {
-      state.orders.forEach(order => syncOrderToSheets(order));
-    }
-    if (!remoteCatalog.length && hadLocalCatalog) {
-      syncCatalogToSheets();
-    }
   } catch (error) {
     setSheetsStatus("No se pudo leer Sheets; usando datos locales");
   }
-}
-
-function mergeById(localItems, remoteItems) {
-  const merged = new Map();
-  (localItems || []).forEach(item => {
-    if (item && item.id) merged.set(item.id, item);
-  });
-  (remoteItems || []).forEach(item => {
-    if (item && item.id) merged.set(item.id, item);
-  });
-  return [...merged.values()];
 }
 
 async function postToGoogleSheets(payload, statusMessage) {
@@ -207,7 +184,7 @@ async function postToGoogleSheets(payload, statusMessage) {
       });
     }
     setSheetsStatus("Enviado a Google Sheets");
-    return { ok: true, pendingVerification: true };
+    return { ok: true };
   } catch (error) {
     try {
       await fetch(url, {
@@ -217,7 +194,7 @@ async function postToGoogleSheets(payload, statusMessage) {
         body: payloadText
       });
       setSheetsStatus("Enviado a Google Sheets");
-      return { ok: true, pendingVerification: true };
+      return { ok: true };
     } catch (fallbackError) {
       setSheetsStatus("No se pudo guardar en Sheets");
       return { ok: false };
@@ -229,21 +206,7 @@ function syncCatalogToSheets() {
   postToGoogleSheets({
     resource: "catalog",
     catalog: state.catalog
-  }, "Guardando catalogo completo en Sheets...");
-}
-
-function syncProductToSheets(product) {
-  postToGoogleSheets({
-    resource: "product",
-    product
-  }, "Guardando producto en Sheets...");
-}
-
-function deleteProductFromSheets(id) {
-  postToGoogleSheets({
-    resource: "deleteProduct",
-    id
-  }, "Eliminando producto en Sheets...");
+  }, "Guardando catalogo en Sheets...");
 }
 
 function syncOrderToSheets(order) {
@@ -1027,15 +990,6 @@ function sendToWhatsapp() {
 catalogForm.addEventListener("submit", event => {
   event.preventDefault();
   const nextProduct = getCatalogFormData();
-  const duplicateName = state.catalog.some(product => {
-    return product.id !== nextProduct.id && normalizeKey(product.name) === normalizeKey(nextProduct.name);
-  });
-
-  if (duplicateName) {
-    setSheetsStatus("Ya existe un producto con ese nombre");
-    return;
-  }
-
   const existingIndex = state.catalog.findIndex(product => product.id === nextProduct.id);
 
   if (existingIndex >= 0) {
@@ -1049,7 +1003,7 @@ catalogForm.addEventListener("submit", event => {
   resetCatalogForm();
   renderCatalog();
   refreshOrderProductOptions();
-  syncProductToSheets(nextProduct);
+  syncCatalogToSheets();
 });
 
 importCatalogForm.addEventListener("submit", async event => {
@@ -1107,7 +1061,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
-    syncProductToSheets(product);
+    syncCatalogToSheets();
   }
 
   if (event.target.classList.contains("delete-catalog")) {
@@ -1115,7 +1069,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
-    deleteProductFromSheets(id);
+    syncCatalogToSheets();
   }
 });
 
@@ -1152,11 +1106,7 @@ form.addEventListener("submit", async event => {
   }
   upsertOrder(order);
   updatePreview();
-  const result = await syncOrderToSheets(order);
-  if (result && result.order && result.order.orderNumber !== order.orderNumber) {
-    upsertOrder(result.order);
-    loadOrder(result.order);
-  }
+  await syncOrderToSheets(order);
   generatePdf();
 });
 
