@@ -1,4 +1,5 @@
 const SIZES = ["5ml", "15ml", "60ml", "120ml"];
+const ORDER_STATUSES = ["Pendiente", "Preparado", "Enviado", "Entregado", "Cancelado"];
 
 // Puedes dejarlo vacio y pegar la URL desde la pantalla de la app.
 const GOOGLE_SHEETS_WEB_APP_URL = "";
@@ -29,7 +30,9 @@ const printBtn = document.querySelector("#printBtn");
 const searchByName = document.querySelector("#searchByName");
 const searchByPhone = document.querySelector("#searchByPhone");
 const searchByOrder = document.querySelector("#searchByOrder");
+const searchByStatus = document.querySelector("#searchByStatus");
 const historyList = document.querySelector("#historyList");
+const statusSummary = document.querySelector("#statusSummary");
 const syncStatus = document.querySelector("#syncStatus");
 const sheetsUrlInput = document.querySelector("#sheetsUrl");
 const saveSheetsUrlBtn = document.querySelector("#saveSheetsUrlBtn");
@@ -514,6 +517,7 @@ function readFormOrder() {
   return {
     id: state.currentOrder?.id || appId(),
     createdAt: state.currentOrder?.createdAt || new Date().toISOString(),
+    status: normalizeOrderStatus(state.currentOrder?.status),
     orderNumber,
     customerName: document.querySelector("#customerName").value.trim(),
     phone: document.querySelector("#phone").value.trim(),
@@ -527,6 +531,10 @@ function readFormOrder() {
     products: validProducts,
     total: validProducts.reduce((sum, item) => sum + item.subtotal, 0)
   };
+}
+
+function normalizeOrderStatus(status) {
+  return ORDER_STATUSES.includes(status) ? status : "Pendiente";
 }
 
 function gfTables() {
@@ -721,6 +729,7 @@ function updatePreview() {
   document.querySelector("#previewReference").textContent = order.reference || "Referencia";
   document.querySelector("#previewTotal").textContent = formatMoney(order.total);
   document.querySelector("#previewPayment").textContent = order.paymentMethod || "Pago contra entrega";
+  document.querySelector("#previewStatus").textContent = normalizeOrderStatus(order.status);
   document.querySelector("#previewNote").textContent = order.orderNote || "Sin observacion";
 
   const items = order.products.filter(item => item.product);
@@ -734,17 +743,21 @@ function renderHistory() {
   const nameQuery = searchByName.value.trim().toLowerCase();
   const phoneQuery = searchByPhone.value.trim().toLowerCase();
   const orderQuery = searchByOrder.value.trim().toLowerCase();
+  const statusQuery = searchByStatus.value;
   const filtered = state.orders.filter(order => {
     const matchesName = !nameQuery || String(order.customerName || "").toLowerCase().includes(nameQuery);
     const matchesPhone = !phoneQuery || String(order.phone || "").toLowerCase().includes(phoneQuery);
     const matchesOrder = !orderQuery || String(order.orderNumber || "").toLowerCase().includes(orderQuery);
-    return matchesName && matchesPhone && matchesOrder;
+    const matchesStatus = !statusQuery || normalizeOrderStatus(order.status) === statusQuery;
+    return matchesName && matchesPhone && matchesOrder && matchesStatus;
   });
 
+  renderStatusSummary();
   historyList.innerHTML = filtered.length ? "" : `<p class="empty-history">Sin pedidos guardados.</p>`;
   filtered.slice().reverse().forEach(order => {
     const item = document.createElement("div");
     item.className = "history-item";
+    const status = normalizeOrderStatus(order.status);
     const products = (order.products || [])
       .filter(product => product.product)
       .map(product => `${product.quantity} x ${product.product} ${product.size}`)
@@ -753,9 +766,17 @@ function renderHistory() {
     item.innerHTML = `
       <div class="history-main">
         <strong>${escapeHtml(order.orderNumber)} · ${escapeHtml(order.customerName || "Sin nombre")}</strong>
+        <span class="status-badge status-${normalizeKey(status)}">${escapeHtml(status)}</span>
         <span>${escapeHtml(order.phone || "Sin telefono")} · ${formatMoney(order.total)}</span>
         <span>${escapeHtml(products || "Sin productos")}</span>
         <span>${new Date(order.createdAt).toLocaleString("es-DO")}</span>
+      </div>
+      <div class="status-actions">
+        ${ORDER_STATUSES.map(nextStatus => `
+          <button class="status-btn ${nextStatus === status ? "is-active" : ""}" type="button" data-id="${order.id}" data-status="${nextStatus}">
+            ${nextStatus}
+          </button>
+        `).join("")}
       </div>
       <div class="history-actions">
         <button class="secondary-btn history-view" type="button" data-id="${order.id}">Ver pedido</button>
@@ -764,6 +785,53 @@ function renderHistory() {
     `;
     historyList.appendChild(item);
   });
+}
+
+function renderStatusSummary() {
+  const counts = ORDER_STATUSES.reduce((result, status) => {
+    result[status] = 0;
+    return result;
+  }, {});
+
+  state.orders.forEach(order => {
+    const status = normalizeOrderStatus(order.status);
+    counts[status] += 1;
+  });
+
+  const activeSales = state.orders.filter(order => normalizeOrderStatus(order.status) !== "Cancelado").length;
+  const completedSales = state.orders.filter(order => normalizeOrderStatus(order.status) === "Entregado").length;
+
+  statusSummary.innerHTML = `
+    <div class="status-count status-active-sale">
+      <span>Venta activa</span>
+      <strong>${activeSales}</strong>
+    </div>
+    <div class="status-count status-completed-sale">
+      <span>Venta completada</span>
+      <strong>${completedSales}</strong>
+    </div>
+  ` + ORDER_STATUSES.map(status => `
+    <div class="status-count status-${normalizeKey(status)}">
+      <span>${status}</span>
+      <strong>${counts[status]}</strong>
+    </div>
+  `).join("");
+}
+
+function changeOrderStatus(id, status) {
+  if (!ORDER_STATUSES.includes(status)) return;
+
+  const order = state.orders.find(saved => saved.id === id);
+  if (!order) return;
+
+  order.status = status;
+  if (state.currentOrder && state.currentOrder.id === id) {
+    state.currentOrder.status = status;
+    updatePreview();
+  }
+  saveOrders();
+  renderHistory();
+  syncOrderToSheets(order);
 }
 
 function upsertOrder(order) {
@@ -917,6 +985,10 @@ function generatePdf() {
   y -= 14;
   text(order.paymentMethod || "Pago contra entrega", 22, 10, "F1");
   y -= 18;
+  text("Estado:", 22, 10, "F2");
+  y -= 14;
+  text(normalizeOrderStatus(order.status), 22, 10, "F1");
+  y -= 18;
   text("Nota:", 22, 10, "F2");
   y -= 14;
   wrapPdfText(order.orderNote || "Sin observacion", 26).forEach(lineText => {
@@ -971,6 +1043,7 @@ function buildWhatsappMessage(order) {
     `Telefono: ${order.phone || "Sin telefono"}`,
     `Direccion: ${order.address || "Sin direccion"}`,
     `Ciudad/Provincia: ${[order.city, order.province].filter(Boolean).join(" / ") || "Sin ciudad/provincia"}`,
+    `Estado: ${normalizeOrderStatus(order.status)}`,
     order.reference ? `Referencia: ${order.reference}` : "",
     "",
     "Productos:",
@@ -1118,6 +1191,7 @@ printBtn.addEventListener("click", () => window.print());
 [searchByName, searchByPhone, searchByOrder].forEach(input => {
   input.addEventListener("input", renderHistory);
 });
+searchByStatus.addEventListener("change", renderHistory);
 cancelCatalogEditBtn.addEventListener("click", resetCatalogForm);
 saveSheetsUrlBtn.addEventListener("click", () => {
   const cleanUrl = cleanSheetsUrl(sheetsUrlInput.value);
@@ -1130,6 +1204,12 @@ syncSheetsBtn.addEventListener("click", loadFromGoogleSheets);
 uploadCatalogBtn.addEventListener("click", syncCatalogToSheets);
 
 historyList.addEventListener("click", event => {
+  const statusButton = event.target.closest("button[data-status]");
+  if (statusButton) {
+    changeOrderStatus(statusButton.dataset.id, statusButton.dataset.status);
+    return;
+  }
+
   const button = event.target.closest("button[data-id]");
   if (!button) return;
 

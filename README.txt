@@ -73,6 +73,9 @@ Historial de pedidos:
 - Puedes buscar pedidos por nombre, telefono o codigo de pedido.
 - El boton Ver pedido carga un pedido anterior en el formulario y en la vista de etiqueta.
 - El boton Reimprimir etiqueta carga el pedido y abre la impresion de la etiqueta 4x6.
+- Cada pedido tiene estado: Pendiente, Preparado, Enviado, Entregado o Cancelado.
+- Puedes cambiar el estado desde el historial con un clic.
+- El historial muestra cuantos pedidos hay en cada estado.
 
 Etiqueta 4x6:
 - Incluye logo textual de Don Perfumes RD, codigo de pedido, cliente, telefono, direccion, productos, total, metodo de pago y QR con el codigo del pedido.

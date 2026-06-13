@@ -56,6 +56,7 @@ function saveOrder_(order) {
   const values = [[
     order.id,
     order.createdAt || new Date().toISOString(),
+    order.status || "Pendiente",
     order.orderNumber,
     order.customerName,
     order.phone,
@@ -103,6 +104,7 @@ function readOrders_() {
   if (values.length <= 1) return [];
 
   const headers = values[0];
+  const hasStatusColumn = headers.indexOf("Estado") >= 0;
   const jsonIndex = headers.indexOf("JSON");
 
   return values.slice(1).map(row => {
@@ -111,22 +113,50 @@ function readOrders_() {
         return JSON.parse(row[jsonIndex]);
       } catch (error) {}
     }
+    for (let index = row.length - 1; index >= 0; index -= 1) {
+      if (String(row[index] || "").trim().charAt(0) === "{") {
+        try {
+          return JSON.parse(row[index]);
+        } catch (error) {}
+      }
+    }
+
+    if (!hasStatusColumn) {
+      return {
+        id: row[0],
+        createdAt: row[1],
+        status: "Pendiente",
+        orderNumber: row[2],
+        customerName: row[3],
+        phone: row[4],
+        address: row[5],
+        province: row[6],
+        city: row[7],
+        reference: row[8],
+        products: [],
+        total: Number(row[10] || 0),
+        paymentMethod: row[11],
+        orderNote: row[12],
+        shippingCompany: row[13]
+      };
+    }
 
     return {
       id: row[0],
       createdAt: row[1],
-      orderNumber: row[2],
-      customerName: row[3],
-      phone: row[4],
-      address: row[5],
-      province: row[6],
-      city: row[7],
-      reference: row[8],
+      status: row[2] || "Pendiente",
+      orderNumber: row[3],
+      customerName: row[4],
+      phone: row[5],
+      address: row[6],
+      province: row[7],
+      city: row[8],
+      reference: row[9],
       products: [],
-      total: Number(row[10] || 0),
-      paymentMethod: row[11],
-      orderNote: row[12],
-      shippingCompany: row[13]
+      total: Number(row[11] || 0),
+      paymentMethod: row[12],
+      orderNote: row[13],
+      shippingCompany: row[14]
     };
   }).filter(order => order && order.id);
 }
@@ -169,6 +199,13 @@ function getSheet_(name, headers) {
 
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
+  } else {
+    const width = Math.max(sheet.getLastColumn(), headers.length);
+    const currentHeaders = sheet.getRange(1, 1, 1, width).getValues()[0];
+    const needsHeaderUpdate = headers.some((header, index) => currentHeaders[index] !== header);
+    if (needsHeaderUpdate) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    }
   }
 
   return sheet;
@@ -190,6 +227,7 @@ function orderHeaders_() {
   return [
     "ID",
     "Fecha",
+    "Estado",
     "Numero de pedido",
     "Cliente",
     "Telefono",

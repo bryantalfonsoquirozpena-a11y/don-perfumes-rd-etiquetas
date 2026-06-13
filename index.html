@@ -196,6 +196,8 @@
             <div class="label-block note-block">
               <h3>Metodo de pago:</h3>
               <p id="previewPayment">Pago contra entrega</p>
+              <h3>Estado:</h3>
+              <p id="previewStatus">Pendiente</p>
               <h3>Nota:</h3>
               <p id="previewNote">Observacion</p>
             </div>
@@ -216,6 +218,7 @@
         <div class="section-heading">
           <h2>Historial de pedidos</h2>
         </div>
+        <div class="status-summary" id="statusSummary"></div>
         <div class="history-filters">
           <label>
             <span>Buscar por nombre</span>
@@ -228,6 +231,17 @@
           <label>
             <span>Buscar por pedido</span>
             <input id="searchByOrder" placeholder="DP-00001">
+          </label>
+          <label>
+            <span>Filtrar por estado</span>
+            <select id="searchByStatus">
+              <option value="">Todos</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="Preparado">Preparado</option>
+              <option value="Enviado">Enviado</option>
+              <option value="Entregado">Entregado</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
           </label>
         </div>
         <div class="history-list" id="historyList"></div>

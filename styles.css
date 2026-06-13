@@ -533,6 +533,34 @@ textarea {
   margin-bottom: 12px;
 }
 
+.status-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.status-count {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: #fbfaf6;
+  padding: 9px 10px;
+}
+
+.status-count span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-count strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 20px;
+}
+
 .history-list {
   display: grid;
   gap: 10px;
@@ -564,6 +592,68 @@ textarea {
   line-height: 1.35;
 }
 
+.status-badge {
+  display: inline-block;
+  width: fit-content;
+  border-radius: 999px;
+  background: #ece7dc;
+  color: var(--ink);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.status-btn {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.status-pendiente {
+  border-left-color: #b9851b;
+}
+
+.status-preparado {
+  border-left-color: #2563a8;
+}
+
+.status-enviado {
+  border-left-color: #6a4bb1;
+}
+
+.status-entregado {
+  border-left-color: #168c4f;
+}
+
+.status-cancelado {
+  border-left-color: #a33b2b;
+}
+
+.status-active-sale {
+  border-left-color: #12635f;
+}
+
+.status-completed-sale {
+  border-left-color: #168c4f;
+}
+
 .history-actions {
   display: grid;
   grid-template-columns: 1fr;
@@ -593,6 +683,10 @@ textarea {
   .catalog-item,
   .product-row {
     grid-template-columns: 1fr;
+  }
+
+  .status-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .import-form .wide {
