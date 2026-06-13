@@ -1,6 +1,11 @@
 const ORDERS_SHEET = "Pedidos";
 const PRODUCTS_SHEET = "Productos";
 
+function setup() {
+  getSheet_(ORDERS_SHEET, orderHeaders_());
+  getSheet_(PRODUCTS_SHEET, productHeaders_());
+}
+
 function doGet(e) {
   const data = {
     ok: true,

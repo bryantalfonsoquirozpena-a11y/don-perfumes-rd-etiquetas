@@ -81,11 +81,18 @@ function saveCatalog() {
 }
 
 function sheetsUrl() {
-  return localStorage.getItem("donPerfumesSheetsUrl") || GOOGLE_SHEETS_WEB_APP_URL;
+  return cleanSheetsUrl(localStorage.getItem("donPerfumesSheetsUrl") || GOOGLE_SHEETS_WEB_APP_URL);
 }
 
 function setSheetsStatus(message) {
   syncStatus.textContent = message;
+}
+
+function cleanSheetsUrl(url) {
+  return String(url || "")
+    .trim()
+    .replace(/\/dev(\?.*)?$/, "/exec")
+    .replace(/\?.*$/, "");
 }
 
 function jsonp(url) {
@@ -1068,7 +1075,9 @@ printBtn.addEventListener("click", () => window.print());
 });
 cancelCatalogEditBtn.addEventListener("click", resetCatalogForm);
 saveSheetsUrlBtn.addEventListener("click", () => {
-  localStorage.setItem("donPerfumesSheetsUrl", sheetsUrlInput.value.trim());
+  const cleanUrl = cleanSheetsUrl(sheetsUrlInput.value);
+  sheetsUrlInput.value = cleanUrl;
+  localStorage.setItem("donPerfumesSheetsUrl", cleanUrl);
   setSheetsStatus("URL de Sheets guardada");
   loadFromGoogleSheets();
 });

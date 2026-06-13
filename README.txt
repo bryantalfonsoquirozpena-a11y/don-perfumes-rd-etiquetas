@@ -35,12 +35,20 @@ Google Sheets:
 1. Crea una hoja nueva en Google Sheets.
 2. Ve a Extensiones > Apps Script.
 3. Pega el contenido de google-apps-script.gs.
-4. Despliega como Web App.
-5. En "Ejecutar como", elige tu usuario.
-6. En "Quien tiene acceso", elige cualquiera con el enlace.
-7. Copia la URL del despliegue.
-8. Abre la app y pega esa URL en "Conexion Google Sheets".
-9. Pulsa Guardar URL y luego Sincronizar.
+4. En el selector de funciones, elige setup y pulsa Ejecutar.
+5. Acepta los permisos de Google. Esto crea/autoriza las hojas Pedidos y Productos.
+6. Despliega como Web App.
+7. En "Ejecutar como", elige tu usuario.
+8. En "Quien tiene acceso", elige cualquiera con el enlace.
+9. Copia la URL del despliegue que termina en /exec.
+10. Abre la app y pega esa URL en "Conexion Google Sheets".
+11. Pulsa Guardar URL y luego Sincronizar.
+
+Si ves "No se pudo leer Sheets; usando datos locales":
+- Confirma que pegaste la URL terminada en /exec, no /dev.
+- Confirma que el Web App tiene acceso para cualquiera con el enlace.
+- Confirma que ejecutaste setup una vez y aceptaste permisos.
+- Si editaste el Apps Script, crea una nueva implementacion/version y pega la URL nueva.
 
 Cuando Google Sheets este conectado:
 - Los pedidos se guardan automaticamente en la hoja Pedidos.
