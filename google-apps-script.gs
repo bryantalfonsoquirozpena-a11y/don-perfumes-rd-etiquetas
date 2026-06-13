@@ -1,9 +1,17 @@
 const ORDERS_SHEET = "Pedidos";
 const PRODUCTS_SHEET = "Productos";
+const INVENTORY_SHEET = "Inventario";
+const INVENTORY_MOVEMENTS_SHEET = "MovimientosInventario";
+const EXPENSES_SHEET = "Gastos";
+const SALES_SHEET = "Ventas";
 
 function setup() {
   getSheet_(ORDERS_SHEET, orderHeaders_());
   getSheet_(PRODUCTS_SHEET, productHeaders_());
+  getSheet_(INVENTORY_SHEET, inventoryHeaders_());
+  getSheet_(INVENTORY_MOVEMENTS_SHEET, inventoryMovementHeaders_());
+  getSheet_(EXPENSES_SHEET, expenseHeaders_());
+  getSheet_(SALES_SHEET, saleHeaders_());
 }
 
 function doGet(e) {
@@ -16,7 +24,11 @@ function doGet(e) {
   const data = {
     ok: true,
     orders: readOrders_(),
-    catalog: readCatalog_()
+    catalog: readCatalog_(),
+    inventory: readInventory_(),
+    inventoryMovements: readInventoryMovements_(),
+    expenses: readExpenses_(),
+    sales: readSales_()
   };
   return json_(data, e && e.parameter && e.parameter.callback);
 }
@@ -35,6 +47,21 @@ function handleWrite_(payload) {
   if (payload.resource === "order") {
     saveOrder_(payload.order);
     return { ok: true, resource: "order" };
+  }
+
+  if (payload.resource === "inventory") {
+    saveInventory_(payload.inventory || {}, payload.inventoryMovements || []);
+    return { ok: true, resource: "inventory" };
+  }
+
+  if (payload.resource === "expenses") {
+    saveExpenses_(payload.expenses || []);
+    return { ok: true, resource: "expenses" };
+  }
+
+  if (payload.resource === "sale") {
+    saveSale_(payload.sale);
+    return { ok: true, resource: "sale" };
   }
 
   if (payload.orderNumber) {
@@ -96,6 +123,86 @@ function saveCatalog_(catalog) {
       JSON.stringify(product)
     ]);
   });
+}
+
+function saveInventory_(inventory, movements) {
+  const inventorySheet = getSheet_(INVENTORY_SHEET, inventoryHeaders_());
+  inventorySheet.clearContents();
+  inventorySheet.appendRow(inventoryHeaders_());
+
+  Object.keys(inventory || {}).forEach(key => {
+    const item = inventory[key];
+    inventorySheet.appendRow([
+      key,
+      item.productId,
+      item.size,
+      Number(item.stock || 0),
+      Number(item.min || 0),
+      JSON.stringify(item)
+    ]);
+  });
+
+  const movementSheet = getSheet_(INVENTORY_MOVEMENTS_SHEET, inventoryMovementHeaders_());
+  movementSheet.clearContents();
+  movementSheet.appendRow(inventoryMovementHeaders_());
+  (movements || []).forEach(move => {
+    movementSheet.appendRow([
+      move.id,
+      move.date,
+      move.type,
+      move.productId,
+      move.product,
+      move.size,
+      Number(move.quantity || 0),
+      Number(move.before || 0),
+      Number(move.after || 0),
+      move.orderNumber,
+      move.note,
+      JSON.stringify(move)
+    ]);
+  });
+}
+
+function saveExpenses_(expenses) {
+  const sheet = getSheet_(EXPENSES_SHEET, expenseHeaders_());
+  sheet.clearContents();
+  sheet.appendRow(expenseHeaders_());
+
+  (expenses || []).forEach(expense => {
+    sheet.appendRow([
+      expense.id,
+      expense.date,
+      expense.category,
+      expense.description,
+      Number(expense.amount || 0),
+      JSON.stringify(expense)
+    ]);
+  });
+}
+
+function saveSale_(sale) {
+  if (!sale || !sale.id) return;
+
+  const sheet = getSheet_(SALES_SHEET, saleHeaders_());
+  const row = findRowById_(sheet, sale.id);
+  const values = [[
+    sale.id,
+    sale.orderId,
+    sale.orderNumber,
+    sale.date,
+    sale.status,
+    sale.customerName,
+    Number(sale.total || 0),
+    sale.paymentMethod,
+    JSON.stringify(sale.products || []),
+    JSON.stringify(sale)
+  ]];
+
+  if (row) {
+    sheet.getRange(row, 1, 1, values[0].length).setValues(values);
+  } else {
+    sheet.appendRow(values[0]);
+  }
 }
 
 function readOrders_() {
@@ -190,6 +297,111 @@ function readCatalog_() {
   }).filter(product => product && product.id && product.name);
 }
 
+function readInventory_() {
+  const sheet = getSheet_(INVENTORY_SHEET, inventoryHeaders_());
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return {};
+
+  const headers = values[0];
+  const jsonIndex = headers.indexOf("JSON");
+  const inventory = {};
+
+  values.slice(1).forEach(row => {
+    if (jsonIndex >= 0 && row[jsonIndex]) {
+      try {
+        inventory[row[0]] = JSON.parse(row[jsonIndex]);
+        return;
+      } catch (error) {}
+    }
+    inventory[row[0]] = {
+      productId: row[1],
+      size: row[2],
+      stock: Number(row[3] || 0),
+      min: Number(row[4] || 0)
+    };
+  });
+  return inventory;
+}
+
+function readInventoryMovements_() {
+  const sheet = getSheet_(INVENTORY_MOVEMENTS_SHEET, inventoryMovementHeaders_());
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return [];
+
+  const headers = values[0];
+  const jsonIndex = headers.indexOf("JSON");
+  return values.slice(1).map(row => {
+    if (jsonIndex >= 0 && row[jsonIndex]) {
+      try {
+        return JSON.parse(row[jsonIndex]);
+      } catch (error) {}
+    }
+    return {
+      id: row[0],
+      date: row[1],
+      type: row[2],
+      productId: row[3],
+      product: row[4],
+      size: row[5],
+      quantity: Number(row[6] || 0),
+      before: Number(row[7] || 0),
+      after: Number(row[8] || 0),
+      orderNumber: row[9],
+      note: row[10]
+    };
+  }).filter(item => item && item.id);
+}
+
+function readExpenses_() {
+  const sheet = getSheet_(EXPENSES_SHEET, expenseHeaders_());
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return [];
+
+  const headers = values[0];
+  const jsonIndex = headers.indexOf("JSON");
+  return values.slice(1).map(row => {
+    if (jsonIndex >= 0 && row[jsonIndex]) {
+      try {
+        return JSON.parse(row[jsonIndex]);
+      } catch (error) {}
+    }
+    return {
+      id: row[0],
+      date: row[1],
+      category: row[2],
+      description: row[3],
+      amount: Number(row[4] || 0)
+    };
+  }).filter(item => item && item.id);
+}
+
+function readSales_() {
+  const sheet = getSheet_(SALES_SHEET, saleHeaders_());
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return [];
+
+  const headers = values[0];
+  const jsonIndex = headers.indexOf("JSON");
+  return values.slice(1).map(row => {
+    if (jsonIndex >= 0 && row[jsonIndex]) {
+      try {
+        return JSON.parse(row[jsonIndex]);
+      } catch (error) {}
+    }
+    return {
+      id: row[0],
+      orderId: row[1],
+      orderNumber: row[2],
+      date: row[3],
+      status: row[4],
+      customerName: row[5],
+      total: Number(row[6] || 0),
+      paymentMethod: row[7],
+      products: []
+    };
+  }).filter(item => item && item.id);
+}
+
 function getSheet_(name, headers) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = spreadsheet.getSheetByName(name);
@@ -253,6 +465,60 @@ function productHeaders_() {
     "15ml",
     "60ml",
     "120ml",
+    "JSON"
+  ];
+}
+
+function inventoryHeaders_() {
+  return [
+    "ID",
+    "Producto ID",
+    "Tamano",
+    "Stock actual",
+    "Stock minimo",
+    "JSON"
+  ];
+}
+
+function inventoryMovementHeaders_() {
+  return [
+    "ID",
+    "Fecha",
+    "Tipo",
+    "Producto ID",
+    "Producto",
+    "Tamano",
+    "Cantidad",
+    "Stock antes",
+    "Stock despues",
+    "Codigo pedido",
+    "Nota",
+    "JSON"
+  ];
+}
+
+function expenseHeaders_() {
+  return [
+    "ID",
+    "Fecha",
+    "Categoria",
+    "Descripcion",
+    "Monto",
+    "JSON"
+  ];
+}
+
+function saleHeaders_() {
+  return [
+    "ID",
+    "Pedido ID",
+    "Numero de pedido",
+    "Fecha",
+    "Estado pedido",
+    "Cliente",
+    "Total",
+    "Metodo de pago",
+    "Productos JSON",
     "JSON"
   ];
 }

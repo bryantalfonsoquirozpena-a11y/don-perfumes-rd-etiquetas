@@ -20,6 +20,7 @@ const state = {
   inventory: readStorage("donPerfumesInventory", {}),
   inventoryMovements: readStorage("donPerfumesInventoryMovements", []),
   expenses: readStorage("donPerfumesExpenses", []),
+  sales: readStorage("donPerfumesSales", []),
   currentOrder: null
 };
 
@@ -130,6 +131,10 @@ function saveExpenses() {
   localStorage.setItem("donPerfumesExpenses", JSON.stringify(state.expenses));
 }
 
+function saveSales() {
+  localStorage.setItem("donPerfumesSales", JSON.stringify(state.sales));
+}
+
 function sheetsUrl() {
   return cleanSheetsUrl(localStorage.getItem("donPerfumesSheetsUrl") || GOOGLE_SHEETS_WEB_APP_URL);
 }
@@ -187,8 +192,15 @@ async function loadFromGoogleSheets() {
     const data = await jsonp(`${url}?action=read`);
     state.orders = Array.isArray(data.orders) ? data.orders : [];
     state.catalog = Array.isArray(data.catalog) ? data.catalog : [];
+    state.inventory = data.inventory && typeof data.inventory === "object" ? data.inventory : state.inventory;
+    state.inventoryMovements = Array.isArray(data.inventoryMovements) ? data.inventoryMovements : state.inventoryMovements;
+    state.expenses = Array.isArray(data.expenses) ? data.expenses : state.expenses;
+    state.sales = Array.isArray(data.sales) ? data.sales : state.sales;
     saveOrders();
     saveCatalog();
+    saveInventory();
+    saveExpenses();
+    saveSales();
     renderCatalog();
     refreshOrderProductOptions();
     renderInventoryProductOptions();
@@ -256,6 +268,28 @@ function syncOrderToSheets(order) {
     resource: "order",
     order
   }, "Guardando pedido en Sheets...");
+}
+
+function syncInventoryToSheets() {
+  postToGoogleSheets({
+    resource: "inventory",
+    inventory: state.inventory,
+    inventoryMovements: state.inventoryMovements
+  }, "Guardando inventario en Sheets...");
+}
+
+function syncExpensesToSheets() {
+  postToGoogleSheets({
+    resource: "expenses",
+    expenses: state.expenses
+  }, "Guardando gastos en Sheets...");
+}
+
+function syncSaleToSheets(sale) {
+  postToGoogleSheets({
+    resource: "sale",
+    sale
+  }, "Guardando venta en Sheets...");
 }
 
 function normalizeKey(value) {
@@ -873,6 +907,7 @@ function changeOrderStatus(id, status) {
   renderHistory();
   renderAccounting();
   syncOrderToSheets(order);
+  upsertSaleFromOrder(order);
 }
 
 function upsertOrder(order) {
@@ -1152,6 +1187,7 @@ function addInventoryMovement({ productId, size, type, quantity, note, orderNumb
     orderNumber: orderNumber || ""
   });
   saveInventory();
+  syncInventoryToSheets();
 }
 
 function registerOrderInventoryExit(order) {
@@ -1166,6 +1202,33 @@ function registerOrderInventoryExit(order) {
     });
   });
   renderInventory();
+}
+
+function saleFromOrder(order) {
+  return {
+    id: `sale-${order.id}`,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    date: order.createdAt,
+    status: normalizeOrderStatus(order.status),
+    customerName: order.customerName,
+    total: Number(order.total || 0),
+    paymentMethod: order.paymentMethod,
+    products: order.products || []
+  };
+}
+
+function upsertSaleFromOrder(order) {
+  const sale = saleFromOrder(order);
+  const index = state.sales.findIndex(item => item.orderId === order.id);
+  if (index >= 0) {
+    state.sales[index] = sale;
+  } else {
+    state.sales.push(sale);
+  }
+  saveSales();
+  renderAccounting();
+  syncSaleToSheets(sale);
 }
 
 function renderInventoryProductOptions() {
@@ -1444,6 +1507,7 @@ form.addEventListener("submit", async event => {
   if (isNewOrder) {
     registerOrderInventoryExit(order);
   }
+  upsertSaleFromOrder(order);
   updatePreview();
   await syncOrderToSheets(order);
   generatePdf();
@@ -1487,6 +1551,7 @@ expenseForm.addEventListener("submit", event => {
     description: expenseDescription.value.trim()
   });
   saveExpenses();
+  syncExpensesToSheets();
   expenseForm.reset();
   expenseDate.value = new Date().toISOString().slice(0, 10);
   renderAccounting();

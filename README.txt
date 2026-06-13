@@ -53,6 +53,10 @@ Si ves "No se pudo leer Sheets; usando datos locales":
 Cuando Google Sheets este conectado:
 - Los pedidos se guardan automaticamente en la hoja Pedidos.
 - El catalogo de productos se guarda automaticamente en la hoja Productos.
+- El inventario se guarda en la hoja Inventario.
+- Los movimientos de inventario se guardan en MovimientosInventario.
+- Los gastos se guardan en Gastos.
+- Las ventas se guardan automaticamente en Ventas.
 - El historial y el catalogo se cargan desde Google Sheets al abrir la app.
 - Si no hay conexion o no se ha pegado URL, la app sigue usando almacenamiento local.
 - Al sincronizar con una hoja vacia, la app conserva los datos locales y los sube a Sheets para evitar perdidas.
@@ -83,6 +87,14 @@ Pestanas:
 - Inventario: stock por producto/tamano, entradas, ajustes, salidas automaticas por pedido y alertas de stock bajo.
 - Contabilidad: ingresos desde pedidos, gastos manuales y ganancia estimada.
 - Reportes: exportacion CSV para Excel o Google Sheets.
+
+Hojas usadas en Google Sheets:
+- Productos
+- Pedidos
+- Inventario
+- MovimientosInventario
+- Gastos
+- Ventas
 
 Inventario:
 - La salida se registra automaticamente cuando se crea un pedido nuevo.
