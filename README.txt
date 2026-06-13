@@ -55,6 +55,14 @@ Cuando Google Sheets este conectado:
 - El catalogo de productos se guarda automaticamente en la hoja Productos.
 - El historial y el catalogo se cargan desde Google Sheets al abrir la app.
 - Si no hay conexion o no se ha pegado URL, la app sigue usando almacenamiento local.
+- Al sincronizar con una hoja vacia, la app conserva los datos locales y los sube a Sheets para evitar perdidas.
+- En uso con varios equipos, Apps Script bloquea escrituras simultaneas y valida codigos de pedido repetidos.
+
+Version estable:
+- Antes de operar desde varios equipos, abre la app y pulsa Sincronizar.
+- Para cambios masivos de productos, usa Importar productos y luego verifica la hoja Productos.
+- El boton Subir catalogo reemplaza el catalogo remoto por el catalogo visible en la app; usalo solo cuando quieras forzar esa copia.
+- El Web App de Apps Script funciona sin login propio. La URL debe tratarse como privada porque permite guardar datos en la hoja.
 
 Notas:
 - Aunque no conectes Google Sheets, el historial funciona localmente en el navegador.

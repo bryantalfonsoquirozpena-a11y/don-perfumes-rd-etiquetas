@@ -1,0 +1,22 @@
+DON PERFUMES RD - VERSION ESTABLE
+
+Revision aplicada:
+- Validacion de sintaxis en app.js y google-apps-script.gs.
+- Proteccion contra datos locales corruptos.
+- Mezcla segura entre datos locales y Google Sheets para evitar borrar datos al conectar una hoja vacia.
+- Guardado de productos por item para reducir riesgo de pisar cambios entre varios equipos.
+- Boton Subir catalogo reservado para reemplazo masivo manual.
+- Validacion de productos duplicados por nombre.
+- Validacion de pedidos sin productos.
+- Revalidacion de codigos de pedido en Apps Script para evitar duplicados entre equipos.
+- Bloqueo de escritura en Apps Script para evitar escrituras simultaneas.
+- Ajuste de impresion 4x6 con alto fijo.
+- Ajuste responsive para botones de conexion y formularios.
+
+Prueba recomendada:
+1. Pega la URL /exec del Web App.
+2. Pulsa Sincronizar.
+3. Crea un producto y confirma que aparece en la hoja Productos.
+4. Crea un pedido y confirma que aparece en la hoja Pedidos.
+5. Cierra y abre la app, pulsa Sincronizar y revisa que cargue historial/catalogo.
+6. Prueba Descargar PDF, Imprimir y Enviar a WhatsApp.

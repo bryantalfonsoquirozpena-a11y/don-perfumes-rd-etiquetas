@@ -3,9 +3,19 @@ const SIZES = ["5ml", "15ml", "60ml", "120ml"];
 // Puedes dejarlo vacio y pegar la URL desde la pantalla de la app.
 const GOOGLE_SHEETS_WEB_APP_URL = "";
 
+function readStorage(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch (error) {
+    localStorage.removeItem(key);
+    return fallback;
+  }
+}
+
 const state = {
-  orders: JSON.parse(localStorage.getItem("donPerfumesOrders") || "[]"),
-  catalog: JSON.parse(localStorage.getItem("donPerfumesCatalog") || "[]"),
+  orders: readStorage("donPerfumesOrders", []),
+  catalog: readStorage("donPerfumesCatalog", []),
   currentOrder: null
 };
 
@@ -54,7 +64,7 @@ function escapeHtml(value) {
 }
 
 function appId() {
-  if (crypto.randomUUID) return crypto.randomUUID();
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
@@ -101,14 +111,21 @@ function jsonp(url) {
     const callback = `donPerfumesCallback_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const script = document.createElement("script");
     const separator = url.includes("?") ? "&" : "?";
+    const timeout = setTimeout(() => {
+      delete window[callback];
+      script.remove();
+      reject(new Error("Tiempo de espera agotado."));
+    }, 15000);
 
     window[callback] = data => {
+      clearTimeout(timeout);
       delete window[callback];
       script.remove();
       resolve(data);
     };
 
     script.onerror = () => {
+      clearTimeout(timeout);
       delete window[callback];
       script.remove();
       reject(new Error("No se pudo cargar Google Sheets."));
@@ -129,8 +146,13 @@ async function loadFromGoogleSheets() {
   setSheetsStatus("Cargando desde Google Sheets...");
   try {
     const data = await jsonp(`${url}?action=read`);
-    state.orders = Array.isArray(data.orders) ? data.orders : [];
-    state.catalog = Array.isArray(data.catalog) ? data.catalog : [];
+    const remoteOrders = Array.isArray(data.orders) ? data.orders : [];
+    const remoteCatalog = Array.isArray(data.catalog) ? data.catalog : [];
+    const hadLocalOrders = state.orders.length > 0;
+    const hadLocalCatalog = state.catalog.length > 0;
+
+    state.orders = mergeById(state.orders, remoteOrders);
+    state.catalog = mergeById(state.catalog, remoteCatalog);
     saveOrders();
     saveCatalog();
     renderCatalog();
@@ -138,9 +160,27 @@ async function loadFromGoogleSheets() {
     renderHistory();
     resetForm();
     setSheetsStatus("Sincronizado con Google Sheets");
+
+    if (!remoteOrders.length && hadLocalOrders) {
+      state.orders.forEach(order => syncOrderToSheets(order));
+    }
+    if (!remoteCatalog.length && hadLocalCatalog) {
+      syncCatalogToSheets();
+    }
   } catch (error) {
     setSheetsStatus("No se pudo leer Sheets; usando datos locales");
   }
+}
+
+function mergeById(localItems, remoteItems) {
+  const merged = new Map();
+  (localItems || []).forEach(item => {
+    if (item && item.id) merged.set(item.id, item);
+  });
+  (remoteItems || []).forEach(item => {
+    if (item && item.id) merged.set(item.id, item);
+  });
+  return [...merged.values()];
 }
 
 async function postToGoogleSheets(payload, statusMessage) {
@@ -151,11 +191,37 @@ async function postToGoogleSheets(payload, statusMessage) {
   }
 
   setSheetsStatus(statusMessage);
+  const payloadText = JSON.stringify(payload);
   try {
-    await jsonp(`${url}?action=write&payload=${encodeURIComponent(JSON.stringify(payload))}`);
-    setSheetsStatus("Guardado en Google Sheets");
+    if (payloadText.length <= 12000) {
+      const result = await jsonp(`${url}?action=write&payload=${encodeURIComponent(payloadText)}`);
+      if (!result || result.ok !== true) throw new Error(result?.error || "Respuesta invalida");
+      setSheetsStatus("Guardado en Google Sheets");
+      return result;
+    } else {
+      await fetch(url, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: payloadText
+      });
+    }
+    setSheetsStatus("Enviado a Google Sheets");
+    return { ok: true, pendingVerification: true };
   } catch (error) {
-    setSheetsStatus("No se pudo guardar en Sheets");
+    try {
+      await fetch(url, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: payloadText
+      });
+      setSheetsStatus("Enviado a Google Sheets");
+      return { ok: true, pendingVerification: true };
+    } catch (fallbackError) {
+      setSheetsStatus("No se pudo guardar en Sheets");
+      return { ok: false };
+    }
   }
 }
 
@@ -163,7 +229,21 @@ function syncCatalogToSheets() {
   postToGoogleSheets({
     resource: "catalog",
     catalog: state.catalog
-  }, "Guardando catalogo en Sheets...");
+  }, "Guardando catalogo completo en Sheets...");
+}
+
+function syncProductToSheets(product) {
+  postToGoogleSheets({
+    resource: "product",
+    product
+  }, "Guardando producto en Sheets...");
+}
+
+function deleteProductFromSheets(id) {
+  postToGoogleSheets({
+    resource: "deleteProduct",
+    id
+  }, "Eliminando producto en Sheets...");
 }
 
 function syncOrderToSheets(order) {
@@ -188,7 +268,8 @@ function parseMoney(value) {
     .replace(/dop/gi, "")
     .replace(/,/g, "")
     .trim();
-  return Number(cleaned || 0);
+  const parsed = Number(cleaned || 0);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function parseBoolean(value) {
@@ -218,10 +299,10 @@ function getCatalogFormData() {
     name: document.querySelector("#catalogProductName").value.trim(),
     active: true,
     prices: {
-      "5ml": Number(document.querySelector("#price5ml").value || 0),
-      "15ml": Number(document.querySelector("#price15ml").value || 0),
-      "60ml": Number(document.querySelector("#price60ml").value || 0),
-      "120ml": Number(document.querySelector("#price120ml").value || 0)
+      "5ml": parseMoney(document.querySelector("#price5ml").value),
+      "15ml": parseMoney(document.querySelector("#price15ml").value),
+      "60ml": parseMoney(document.querySelector("#price60ml").value),
+      "120ml": parseMoney(document.querySelector("#price120ml").value)
     }
   };
 }
@@ -428,8 +509,8 @@ function getProducts() {
   return [...document.querySelectorAll(".product-row")].map(row => {
     const productId = row.querySelector(".product-select").value;
     const catalogProduct = findCatalogProduct(productId);
-    const quantity = Number(row.querySelector(".product-qty").value || 0);
-    const price = Number(row.querySelector(".product-price").value || 0);
+    const quantity = Math.max(0, Number(row.querySelector(".product-qty").value || 0));
+    const price = Math.max(0, Number(row.querySelector(".product-price").value || 0));
     const size = row.querySelector(".product-size").value;
 
     return {
@@ -447,7 +528,7 @@ function updateRowPrice(row) {
   const productId = row.querySelector(".product-select").value;
   const size = row.querySelector(".product-size").value;
   const price = findCatalogProduct(productId)?.prices?.[size] || 0;
-  const qty = Number(row.querySelector(".product-qty").value || 0);
+  const qty = Math.max(0, Number(row.querySelector(".product-qty").value || 0));
 
   row.querySelector(".product-price").value = price;
   row.querySelector(".line-total").textContent = formatMoney(qty * price);
@@ -466,6 +547,7 @@ function updateTotals() {
 function readFormOrder() {
   const orderNumber = document.querySelector("#orderNumber").value.trim() || nextOrderNumber();
   const products = getProducts();
+  const validProducts = products.filter(item => item.productId && item.product && item.quantity > 0);
   return {
     id: state.currentOrder?.id || appId(),
     createdAt: state.currentOrder?.createdAt || new Date().toISOString(),
@@ -479,8 +561,8 @@ function readFormOrder() {
     paymentMethod: document.querySelector("#paymentMethod").value,
     orderNote: document.querySelector("#orderNote").value.trim(),
     shippingCompany: document.querySelector("#shippingCompany").value.trim(),
-    products,
-    total: products.reduce((sum, item) => sum + item.subtotal, 0)
+    products: validProducts,
+    total: validProducts.reduce((sum, item) => sum + item.subtotal, 0)
   };
 }
 
@@ -945,6 +1027,15 @@ function sendToWhatsapp() {
 catalogForm.addEventListener("submit", event => {
   event.preventDefault();
   const nextProduct = getCatalogFormData();
+  const duplicateName = state.catalog.some(product => {
+    return product.id !== nextProduct.id && normalizeKey(product.name) === normalizeKey(nextProduct.name);
+  });
+
+  if (duplicateName) {
+    setSheetsStatus("Ya existe un producto con ese nombre");
+    return;
+  }
+
   const existingIndex = state.catalog.findIndex(product => product.id === nextProduct.id);
 
   if (existingIndex >= 0) {
@@ -958,7 +1049,7 @@ catalogForm.addEventListener("submit", event => {
   resetCatalogForm();
   renderCatalog();
   refreshOrderProductOptions();
-  syncCatalogToSheets();
+  syncProductToSheets(nextProduct);
 });
 
 importCatalogForm.addEventListener("submit", async event => {
@@ -1016,7 +1107,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
-    syncCatalogToSheets();
+    syncProductToSheets(product);
   }
 
   if (event.target.classList.contains("delete-catalog")) {
@@ -1024,7 +1115,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
-    syncCatalogToSheets();
+    deleteProductFromSheets(id);
   }
 });
 
@@ -1055,9 +1146,17 @@ form.addEventListener("change", updatePreview);
 form.addEventListener("submit", async event => {
   event.preventDefault();
   const order = readFormOrder();
+  if (!order.products.length) {
+    setSheetsStatus("Agrega al menos un producto al pedido");
+    return;
+  }
   upsertOrder(order);
   updatePreview();
-  await syncOrderToSheets(order);
+  const result = await syncOrderToSheets(order);
+  if (result && result.order && result.order.orderNumber !== order.orderNumber) {
+    upsertOrder(result.order);
+    loadOrder(result.order);
+  }
   generatePdf();
 });
 

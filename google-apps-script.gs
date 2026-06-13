@@ -27,22 +27,38 @@ function doPost(e) {
 }
 
 function handleWrite_(payload) {
-  if (payload.resource === "catalog") {
-    saveCatalog_(payload.catalog || []);
-    return { ok: true, resource: "catalog" };
-  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (payload.resource === "catalog") {
+      saveCatalog_(payload.catalog || []);
+      return { ok: true, resource: "catalog" };
+    }
 
-  if (payload.resource === "order") {
-    saveOrder_(payload.order);
-    return { ok: true, resource: "order" };
-  }
+    if (payload.resource === "product") {
+      saveProduct_(payload.product);
+      return { ok: true, resource: "product" };
+    }
 
-  if (payload.orderNumber) {
-    saveOrder_(payload);
-    return { ok: true, resource: "order" };
-  }
+    if (payload.resource === "deleteProduct") {
+      deleteProduct_(payload.id);
+      return { ok: true, resource: "deleteProduct" };
+    }
 
-  return { ok: false, error: "Recurso no reconocido" };
+    if (payload.resource === "order") {
+      const order = saveOrder_(payload.order);
+      return { ok: true, resource: "order", order };
+    }
+
+    if (payload.orderNumber) {
+      const order = saveOrder_(payload);
+      return { ok: true, resource: "order", order };
+    }
+
+    return { ok: false, error: "Recurso no reconocido" };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function saveOrder_(order) {
@@ -50,6 +66,9 @@ function saveOrder_(order) {
 
   const sheet = getSheet_(ORDERS_SHEET, orderHeaders_());
   const row = findRowById_(sheet, order.id);
+  if (!row && isDuplicateOrderNumber_(sheet, order.orderNumber, order.id)) {
+    order.orderNumber = nextOrderNumber_(sheet);
+  }
   const productsText = (order.products || [])
     .map(item => `${item.quantity} x ${item.product} ${item.size} @ ${item.price}`)
     .join(" | ");
@@ -76,6 +95,7 @@ function saveOrder_(order) {
   } else {
     sheet.appendRow(values[0]);
   }
+  return order;
 }
 
 function saveCatalog_(catalog) {
@@ -95,6 +115,37 @@ function saveCatalog_(catalog) {
       JSON.stringify(product)
     ]);
   });
+}
+
+function saveProduct_(product) {
+  if (!product || !product.id) return;
+
+  const sheet = getSheet_(PRODUCTS_SHEET, productHeaders_());
+  const row = findRowById_(sheet, product.id);
+  const values = [[
+    product.id,
+    product.name,
+    product.active === false ? "no" : "si",
+    Number(product.prices && product.prices["5ml"] || 0),
+    Number(product.prices && product.prices["15ml"] || 0),
+    Number(product.prices && product.prices["60ml"] || 0),
+    Number(product.prices && product.prices["120ml"] || 0),
+    JSON.stringify(product)
+  ]];
+
+  if (row) {
+    sheet.getRange(row, 1, 1, values[0].length).setValues(values);
+  } else {
+    sheet.appendRow(values[0]);
+  }
+}
+
+function deleteProduct_(id) {
+  if (!id) return;
+
+  const sheet = getSheet_(PRODUCTS_SHEET, productHeaders_());
+  const row = findRowById_(sheet, id);
+  if (row) sheet.deleteRow(row);
 }
 
 function readOrders_() {
@@ -183,6 +234,26 @@ function findRowById_(sheet, id) {
     if (ids[index][0] === id) return index + 2;
   }
   return null;
+}
+
+function isDuplicateOrderNumber_(sheet, orderNumber, id) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return false;
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  return rows.some(row => row[0] !== id && row[2] === orderNumber);
+}
+
+function nextOrderNumber_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return "DP-00001";
+
+  const values = sheet.getRange(2, 3, lastRow - 1, 1).getValues();
+  const max = values.reduce((highest, row) => {
+    const match = /^DP-(\d{5})$/.exec(String(row[0] || ""));
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `DP-${String(max + 1).padStart(5, "0")}`;
 }
 
 function orderHeaders_() {
