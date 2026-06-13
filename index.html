@@ -18,7 +18,15 @@
         <div class="sync-pill" id="syncStatus">Historial local activo</div>
       </header>
 
-      <section class="sheets-panel">
+      <nav class="tab-nav" aria-label="Modulos">
+        <button class="tab-btn is-active" type="button" data-tab="pedidos">Pedidos</button>
+        <button class="tab-btn" type="button" data-tab="catalogo">Catalogo</button>
+        <button class="tab-btn" type="button" data-tab="inventario">Inventario</button>
+        <button class="tab-btn" type="button" data-tab="contabilidad">Contabilidad</button>
+        <button class="tab-btn" type="button" data-tab="reportes">Reportes</button>
+      </nav>
+
+      <section class="sheets-panel tab-panel" data-tab-panel="pedidos">
         <div class="section-heading">
           <h2>Conexion Google Sheets</h2>
         </div>
@@ -33,7 +41,7 @@
         </div>
       </section>
 
-      <section class="catalog-panel">
+      <section class="catalog-panel tab-panel" data-tab-panel="catalogo" hidden>
         <div class="section-heading">
           <h2>Catalogo de Productos</h2>
           <button class="secondary-btn" type="button" id="cancelCatalogEditBtn">Limpiar</button>
@@ -82,7 +90,7 @@
         <div class="catalog-list" id="catalogList"></div>
       </section>
 
-      <form class="order-form" id="orderForm">
+      <form class="order-form tab-panel" id="orderForm" data-tab-panel="pedidos">
         <section class="form-section">
           <div class="section-heading">
             <h2>Cliente</h2>
@@ -159,9 +167,114 @@
           <button class="ghost-btn" type="button" id="newOrderBtn">Nuevo pedido</button>
         </div>
       </form>
+
+      <section class="module-panel tab-panel" id="inventoryPanel" data-tab-panel="inventario" hidden>
+        <div class="section-heading">
+          <h2>Inventario</h2>
+        </div>
+        <form class="module-form" id="inventoryForm">
+          <label>
+            <span>Producto</span>
+            <select id="inventoryProduct" required></select>
+          </label>
+          <label>
+            <span>Tamano</span>
+            <select id="inventorySize">
+              <option value="5ml">5ml</option>
+              <option value="15ml">15ml</option>
+              <option value="60ml">60ml</option>
+              <option value="120ml">120ml</option>
+            </select>
+          </label>
+          <label>
+            <span>Movimiento</span>
+            <select id="inventoryType">
+              <option value="entrada">Entrada</option>
+              <option value="ajuste">Ajuste manual</option>
+            </select>
+          </label>
+          <label>
+            <span>Cantidad</span>
+            <input id="inventoryQty" type="number" min="0" step="1" required>
+          </label>
+          <label>
+            <span>Alerta stock bajo</span>
+            <input id="inventoryMin" type="number" min="0" step="1" value="3">
+          </label>
+          <label class="wide">
+            <span>Nota</span>
+            <input id="inventoryNote" placeholder="Compra, ajuste, conteo fisico">
+          </label>
+          <button class="primary-btn" type="submit">Guardar movimiento</button>
+        </form>
+        <div class="inventory-alerts" id="inventoryAlerts"></div>
+        <div class="table-wrap">
+          <table class="data-table" id="inventoryTable"></table>
+        </div>
+        <div class="section-heading compact-heading">
+          <h3>Historial de movimientos</h3>
+        </div>
+        <div class="movement-list" id="inventoryMovementsList"></div>
+      </section>
+
+      <section class="module-panel tab-panel" id="accountingPanel" data-tab-panel="contabilidad" hidden>
+        <div class="section-heading">
+          <h2>Contabilidad basica</h2>
+        </div>
+        <div class="accounting-filters">
+          <label>
+            <span>Periodo</span>
+            <select id="accountingPeriod">
+              <option value="day">Dia</option>
+              <option value="week">Semana</option>
+              <option value="month" selected>Mes</option>
+            </select>
+          </label>
+          <label>
+            <span>Fecha base</span>
+            <input id="accountingDate" type="date">
+          </label>
+        </div>
+        <div class="finance-summary" id="financeSummary"></div>
+        <form class="module-form" id="expenseForm">
+          <label>
+            <span>Fecha</span>
+            <input id="expenseDate" type="date" required>
+          </label>
+          <label>
+            <span>Categoria</span>
+            <input id="expenseCategory" placeholder="Publicidad, envio, compra" required>
+          </label>
+          <label>
+            <span>Monto</span>
+            <input id="expenseAmount" type="number" min="0" step="1" required>
+          </label>
+          <label class="wide">
+            <span>Descripcion</span>
+            <input id="expenseDescription">
+          </label>
+          <button class="primary-btn" type="submit">Registrar gasto</button>
+        </form>
+        <div class="section-heading compact-heading">
+          <h3>Gastos registrados</h3>
+        </div>
+        <div class="movement-list" id="expenseList"></div>
+      </section>
+
+      <section class="module-panel tab-panel" id="reportsPanel" data-tab-panel="reportes" hidden>
+        <div class="section-heading">
+          <h2>Reportes</h2>
+        </div>
+        <div class="report-actions">
+          <button class="primary-btn" type="button" id="exportAccountingCsvBtn">Exportar contabilidad CSV</button>
+          <button class="secondary-btn" type="button" id="exportInventoryCsvBtn">Exportar inventario CSV</button>
+          <button class="secondary-btn" type="button" id="exportOrdersCsvBtn">Exportar pedidos CSV</button>
+        </div>
+        <p class="import-help">Los archivos CSV abren en Excel o Google Sheets.</p>
+      </section>
     </section>
 
-    <aside class="side-panel">
+    <aside class="side-panel tab-panel" data-tab-panel="pedidos">
       <section class="label-card">
         <div class="label-preview" id="labelPreview">
           <div class="label-top">

@@ -17,6 +17,9 @@ function readStorage(key, fallback) {
 const state = {
   orders: readStorage("donPerfumesOrders", []),
   catalog: readStorage("donPerfumesCatalog", []),
+  inventory: readStorage("donPerfumesInventory", {}),
+  inventoryMovements: readStorage("donPerfumesInventoryMovements", []),
+  expenses: readStorage("donPerfumesExpenses", []),
   currentOrder: null
 };
 
@@ -45,6 +48,30 @@ const importCatalogForm = document.querySelector("#importCatalogForm");
 const catalogCsvUrl = document.querySelector("#catalogCsvUrl");
 const catalogCsvText = document.querySelector("#catalogCsvText");
 const importStatus = document.querySelector("#importStatus");
+const tabButtons = document.querySelectorAll(".tab-btn");
+const tabPanels = document.querySelectorAll(".tab-panel");
+const inventoryForm = document.querySelector("#inventoryForm");
+const inventoryProduct = document.querySelector("#inventoryProduct");
+const inventorySize = document.querySelector("#inventorySize");
+const inventoryType = document.querySelector("#inventoryType");
+const inventoryQty = document.querySelector("#inventoryQty");
+const inventoryMin = document.querySelector("#inventoryMin");
+const inventoryNote = document.querySelector("#inventoryNote");
+const inventoryAlerts = document.querySelector("#inventoryAlerts");
+const inventoryTable = document.querySelector("#inventoryTable");
+const inventoryMovementsList = document.querySelector("#inventoryMovementsList");
+const accountingPeriod = document.querySelector("#accountingPeriod");
+const accountingDate = document.querySelector("#accountingDate");
+const financeSummary = document.querySelector("#financeSummary");
+const expenseForm = document.querySelector("#expenseForm");
+const expenseDate = document.querySelector("#expenseDate");
+const expenseCategory = document.querySelector("#expenseCategory");
+const expenseAmount = document.querySelector("#expenseAmount");
+const expenseDescription = document.querySelector("#expenseDescription");
+const expenseList = document.querySelector("#expenseList");
+const exportAccountingCsvBtn = document.querySelector("#exportAccountingCsvBtn");
+const exportInventoryCsvBtn = document.querySelector("#exportInventoryCsvBtn");
+const exportOrdersCsvBtn = document.querySelector("#exportOrdersCsvBtn");
 
 const money = new Intl.NumberFormat("es-DO", {
   style: "currency",
@@ -92,6 +119,15 @@ function saveOrders() {
 
 function saveCatalog() {
   localStorage.setItem("donPerfumesCatalog", JSON.stringify(state.catalog));
+}
+
+function saveInventory() {
+  localStorage.setItem("donPerfumesInventory", JSON.stringify(state.inventory));
+  localStorage.setItem("donPerfumesInventoryMovements", JSON.stringify(state.inventoryMovements));
+}
+
+function saveExpenses() {
+  localStorage.setItem("donPerfumesExpenses", JSON.stringify(state.expenses));
 }
 
 function sheetsUrl() {
@@ -155,6 +191,9 @@ async function loadFromGoogleSheets() {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
+    renderInventoryProductOptions();
+    renderInventory();
+    renderAccounting();
     renderHistory();
     resetForm();
     setSheetsStatus("Sincronizado con Google Sheets");
@@ -374,6 +413,7 @@ function importCatalogProducts(products) {
   saveCatalog();
   renderCatalog();
   refreshOrderProductOptions();
+  renderInventoryProductOptions();
   syncCatalogToSheets();
   return { created, updated };
 }
@@ -831,6 +871,7 @@ function changeOrderStatus(id, status) {
   }
   saveOrders();
   renderHistory();
+  renderAccounting();
   syncOrderToSheets(order);
 }
 
@@ -849,6 +890,7 @@ function upsertOrder(order) {
   state.currentOrder = order;
   saveOrders();
   renderHistory();
+  renderAccounting();
 }
 
 function loadOrder(order) {
@@ -1060,6 +1102,223 @@ function sendToWhatsapp() {
   window.open(url, "_blank", "noopener");
 }
 
+function switchTab(tab) {
+  tabButtons.forEach(button => button.classList.toggle("is-active", button.dataset.tab === tab));
+  tabPanels.forEach(panel => {
+    panel.hidden = panel.dataset.tabPanel !== tab;
+  });
+  if (tab === "inventario") renderInventory();
+  if (tab === "contabilidad") renderAccounting();
+}
+
+function inventoryKey(productId, size) {
+  return `${productId}__${size}`;
+}
+
+function stockRecord(productId, size) {
+  const key = inventoryKey(productId, size);
+  if (!state.inventory[key]) {
+    state.inventory[key] = { productId, size, stock: 0, min: 3 };
+  }
+  return state.inventory[key];
+}
+
+function productNameById(productId) {
+  return findCatalogProduct(productId)?.name || "Producto eliminado";
+}
+
+function addInventoryMovement({ productId, size, type, quantity, note, orderNumber }) {
+  const record = stockRecord(productId, size);
+  const qty = Math.max(0, Number(quantity || 0));
+  const before = Number(record.stock || 0);
+  let after = before;
+
+  if (type === "entrada") after = before + qty;
+  if (type === "salida") after = Math.max(0, before - qty);
+  if (type === "ajuste") after = qty;
+
+  record.stock = after;
+  state.inventoryMovements.unshift({
+    id: appId(),
+    date: new Date().toISOString(),
+    productId,
+    product: productNameById(productId),
+    size,
+    type,
+    quantity: qty,
+    before,
+    after,
+    note: note || "",
+    orderNumber: orderNumber || ""
+  });
+  saveInventory();
+}
+
+function registerOrderInventoryExit(order) {
+  (order.products || []).forEach(item => {
+    addInventoryMovement({
+      productId: item.productId,
+      size: item.size,
+      type: "salida",
+      quantity: item.quantity,
+      note: "Salida automatica por pedido",
+      orderNumber: order.orderNumber
+    });
+  });
+  renderInventory();
+}
+
+function renderInventoryProductOptions() {
+  if (!inventoryProduct) return;
+  const active = activeCatalog();
+  inventoryProduct.innerHTML = active.length
+    ? active.map(product => `<option value="${product.id}">${escapeHtml(product.name)}</option>`).join("")
+    : `<option value="">Agrega productos al catalogo</option>`;
+}
+
+function renderInventory() {
+  renderInventoryProductOptions();
+  const rows = [];
+  state.catalog.forEach(product => {
+    SIZES.forEach(size => {
+      const record = stockRecord(product.id, size);
+      rows.push({ product, size, record });
+    });
+  });
+
+  const low = rows.filter(row => Number(row.record.stock || 0) <= Number(row.record.min || 0));
+  inventoryAlerts.innerHTML = low.length
+    ? low.map(row => `<div class="alert-item">${escapeHtml(row.product.name)} ${row.size}: stock ${row.record.stock}, minimo ${row.record.min}</div>`).join("")
+    : `<div class="ok-item">Sin alertas de stock bajo.</div>`;
+
+  inventoryTable.innerHTML = `
+    <thead><tr><th>Producto</th><th>Tamano</th><th>Stock</th><th>Minimo</th></tr></thead>
+    <tbody>
+      ${rows.map(row => `
+        <tr class="${Number(row.record.stock || 0) <= Number(row.record.min || 0) ? "is-low" : ""}">
+          <td>${escapeHtml(row.product.name)}</td>
+          <td>${row.size}</td>
+          <td>${row.record.stock || 0}</td>
+          <td>${row.record.min || 0}</td>
+        </tr>
+      `).join("")}
+    </tbody>
+  `;
+
+  inventoryMovementsList.innerHTML = state.inventoryMovements.length
+    ? state.inventoryMovements.slice(0, 80).map(move => `
+      <div class="movement-item">
+        <strong>${escapeHtml(move.product)} ${escapeHtml(move.size)} · ${escapeHtml(move.type)}</strong>
+        <span>${new Date(move.date).toLocaleString("es-DO")} · ${move.before} -> ${move.after} · Cant. ${move.quantity}</span>
+        <span>${escapeHtml(move.orderNumber || move.note || "")}</span>
+      </div>
+    `).join("")
+    : `<p class="empty-history">Sin movimientos de inventario.</p>`;
+}
+
+function startOfPeriod(date, period) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  if (period === "week") {
+    const day = start.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    start.setDate(start.getDate() + diff);
+  }
+  if (period === "month") {
+    start.setDate(1);
+  }
+  return start;
+}
+
+function endOfPeriod(start, period) {
+  const end = new Date(start);
+  if (period === "day") end.setDate(end.getDate() + 1);
+  if (period === "week") end.setDate(end.getDate() + 7);
+  if (period === "month") end.setMonth(end.getMonth() + 1);
+  return end;
+}
+
+function inSelectedPeriod(dateText) {
+  const base = accountingDate.value ? new Date(`${accountingDate.value}T00:00:00`) : new Date();
+  const start = startOfPeriod(base, accountingPeriod.value);
+  const end = endOfPeriod(start, accountingPeriod.value);
+  const date = new Date(dateText);
+  return date >= start && date < end;
+}
+
+function accountingOrders() {
+  return state.orders.filter(order => {
+    return normalizeOrderStatus(order.status) !== "Cancelado" && inSelectedPeriod(order.createdAt);
+  });
+}
+
+function accountingExpenses() {
+  return state.expenses.filter(expense => inSelectedPeriod(expense.date));
+}
+
+function renderAccounting() {
+  const orders = accountingOrders();
+  const expenses = accountingExpenses();
+  const income = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const profit = income - expenseTotal;
+  const completed = orders.filter(order => normalizeOrderStatus(order.status) === "Entregado").reduce((sum, order) => sum + Number(order.total || 0), 0);
+
+  financeSummary.innerHTML = `
+    <div class="finance-card"><span>Ingresos totales</span><strong>${formatMoney(income)}</strong></div>
+    <div class="finance-card"><span>Ventas completadas</span><strong>${formatMoney(completed)}</strong></div>
+    <div class="finance-card"><span>Gastos totales</span><strong>${formatMoney(expenseTotal)}</strong></div>
+    <div class="finance-card"><span>Ganancia estimada</span><strong>${formatMoney(profit)}</strong></div>
+  `;
+
+  expenseList.innerHTML = state.expenses.length
+    ? state.expenses.slice().reverse().map(expense => `
+      <div class="movement-item">
+        <strong>${escapeHtml(expense.category)} · ${formatMoney(expense.amount)}</strong>
+        <span>${new Date(expense.date).toLocaleDateString("es-DO")} · ${escapeHtml(expense.description || "")}</span>
+      </div>
+    `).join("")
+    : `<p class="empty-history">Sin gastos registrados.</p>`;
+}
+
+function csvEscape(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(filename, rows) {
+  const csv = rows.map(row => row.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function exportAccountingCsv() {
+  const rows = [["Tipo", "Fecha", "Detalle", "Estado/Categoria", "Monto"]];
+  accountingOrders().forEach(order => rows.push(["Venta", order.createdAt, order.orderNumber, normalizeOrderStatus(order.status), order.total]));
+  accountingExpenses().forEach(expense => rows.push(["Gasto", expense.date, expense.description, expense.category, expense.amount]));
+  downloadCsv("contabilidad-don-perfumes.csv", rows);
+}
+
+function exportInventoryCsv() {
+  const rows = [["Producto", "Tamano", "Stock", "Minimo"]];
+  state.catalog.forEach(product => {
+    SIZES.forEach(size => {
+      const record = stockRecord(product.id, size);
+      rows.push([product.name, size, record.stock || 0, record.min || 0]);
+    });
+  });
+  downloadCsv("inventario-don-perfumes.csv", rows);
+}
+
+function exportOrdersCsv() {
+  const rows = [["Pedido", "Fecha", "Cliente", "Telefono", "Estado", "Total"]];
+  state.orders.forEach(order => rows.push([order.orderNumber, order.createdAt, order.customerName, order.phone, normalizeOrderStatus(order.status), order.total]));
+  downloadCsv("pedidos-don-perfumes.csv", rows);
+}
+
 catalogForm.addEventListener("submit", event => {
   event.preventDefault();
   const nextProduct = getCatalogFormData();
@@ -1076,6 +1335,7 @@ catalogForm.addEventListener("submit", event => {
   resetCatalogForm();
   renderCatalog();
   refreshOrderProductOptions();
+  renderInventoryProductOptions();
   syncCatalogToSheets();
 });
 
@@ -1134,6 +1394,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
+    renderInventoryProductOptions();
     syncCatalogToSheets();
   }
 
@@ -1142,6 +1403,7 @@ catalogList.addEventListener("click", event => {
     saveCatalog();
     renderCatalog();
     refreshOrderProductOptions();
+    renderInventoryProductOptions();
     syncCatalogToSheets();
   }
 });
@@ -1177,7 +1439,11 @@ form.addEventListener("submit", async event => {
     setSheetsStatus("Agrega al menos un producto al pedido");
     return;
   }
+  const isNewOrder = !state.orders.some(saved => saved.id === order.id);
   upsertOrder(order);
+  if (isNewOrder) {
+    registerOrderInventoryExit(order);
+  }
   updatePreview();
   await syncOrderToSheets(order);
   generatePdf();
@@ -1188,10 +1454,48 @@ newOrderBtn.addEventListener("click", resetForm);
 downloadPdfBtn.addEventListener("click", generatePdf);
 sendWhatsappBtn.addEventListener("click", sendToWhatsapp);
 printBtn.addEventListener("click", () => window.print());
+tabButtons.forEach(button => {
+  button.addEventListener("click", () => switchTab(button.dataset.tab));
+});
 [searchByName, searchByPhone, searchByOrder].forEach(input => {
   input.addEventListener("input", renderHistory);
 });
 searchByStatus.addEventListener("change", renderHistory);
+inventoryForm.addEventListener("submit", event => {
+  event.preventDefault();
+  if (!inventoryProduct.value) return;
+  const record = stockRecord(inventoryProduct.value, inventorySize.value);
+  record.min = Math.max(0, Number(inventoryMin.value || 0));
+  addInventoryMovement({
+    productId: inventoryProduct.value,
+    size: inventorySize.value,
+    type: inventoryType.value,
+    quantity: inventoryQty.value,
+    note: inventoryNote.value
+  });
+  inventoryForm.reset();
+  inventoryMin.value = record.min;
+  renderInventory();
+});
+expenseForm.addEventListener("submit", event => {
+  event.preventDefault();
+  state.expenses.push({
+    id: appId(),
+    date: expenseDate.value || new Date().toISOString().slice(0, 10),
+    category: expenseCategory.value.trim(),
+    amount: parseMoney(expenseAmount.value),
+    description: expenseDescription.value.trim()
+  });
+  saveExpenses();
+  expenseForm.reset();
+  expenseDate.value = new Date().toISOString().slice(0, 10);
+  renderAccounting();
+});
+accountingPeriod.addEventListener("change", renderAccounting);
+accountingDate.addEventListener("change", renderAccounting);
+exportAccountingCsvBtn.addEventListener("click", exportAccountingCsv);
+exportInventoryCsvBtn.addEventListener("click", exportInventoryCsv);
+exportOrdersCsvBtn.addEventListener("click", exportOrdersCsv);
 cancelCatalogEditBtn.addEventListener("click", resetCatalogForm);
 saveSheetsUrlBtn.addEventListener("click", () => {
   const cleanUrl = cleanSheetsUrl(sheetsUrlInput.value);
@@ -1224,7 +1528,12 @@ historyList.addEventListener("click", event => {
 });
 
 sheetsUrlInput.value = sheetsUrl();
+accountingDate.value = new Date().toISOString().slice(0, 10);
+expenseDate.value = new Date().toISOString().slice(0, 10);
 renderCatalog();
+renderInventoryProductOptions();
+renderInventory();
+renderAccounting();
 resetForm();
 renderHistory();
 if (sheetsUrl()) loadFromGoogleSheets();

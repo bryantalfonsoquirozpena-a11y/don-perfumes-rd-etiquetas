@@ -77,5 +77,25 @@ Historial de pedidos:
 - Puedes cambiar el estado desde el historial con un clic.
 - El historial muestra cuantos pedidos hay en cada estado.
 
+Pestanas:
+- Pedidos: formulario, etiqueta, historial y estados.
+- Catalogo: productos y precios por tamano.
+- Inventario: stock por producto/tamano, entradas, ajustes, salidas automaticas por pedido y alertas de stock bajo.
+- Contabilidad: ingresos desde pedidos, gastos manuales y ganancia estimada.
+- Reportes: exportacion CSV para Excel o Google Sheets.
+
+Inventario:
+- La salida se registra automaticamente cuando se crea un pedido nuevo.
+- Reimprimir o ver un pedido anterior no descuenta inventario otra vez.
+- Puedes registrar entradas o hacer ajustes manuales.
+- El historial muestra movimientos con stock antes y despues.
+
+Contabilidad:
+- Los ingresos se calculan desde pedidos no cancelados.
+- Los pedidos Cancelados no cuentan como venta activa.
+- Los pedidos Entregados cuentan como venta completada.
+- Puedes filtrar por dia, semana o mes.
+- Los gastos se registran manualmente.
+
 Etiqueta 4x6:
 - Incluye logo textual de Don Perfumes RD, codigo de pedido, cliente, telefono, direccion, productos, total, metodo de pago y QR con el codigo del pedido.

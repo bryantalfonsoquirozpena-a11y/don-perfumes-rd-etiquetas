@@ -89,8 +89,34 @@ h2 {
   font-size: 13px;
 }
 
+.tab-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding-bottom: 2px;
+}
+
+.tab-btn {
+  min-height: 42px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 14px;
+  font-weight: 800;
+}
+
+.tab-btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .catalog-panel,
 .sheets-panel,
+.module-panel,
 .order-form,
 .label-card,
 .history-panel {
@@ -102,8 +128,13 @@ h2 {
 
 .catalog-panel,
 .sheets-panel,
+.module-panel,
 .order-form {
   overflow: hidden;
+}
+
+.module-panel {
+  padding: 18px;
 }
 
 .sheets-panel {
@@ -152,6 +183,128 @@ h2 {
   grid-template-columns: minmax(220px, 1fr) repeat(3, auto);
   gap: 10px;
   align-items: end;
+}
+
+.module-form,
+.accounting-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.module-form .wide {
+  grid-column: 1 / -1;
+}
+
+.inventory-alerts {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.alert-item,
+.ok-item {
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.alert-item {
+  border: 1px solid #e2bbb0;
+  background: #fff3ef;
+  color: #913216;
+}
+
+.ok-item {
+  border: 1px solid #b9d8c5;
+  background: #effaf3;
+  color: #12633b;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 10px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.data-table th {
+  color: var(--muted);
+  background: #fbfaf6;
+}
+
+.data-table tr.is-low td {
+  background: #fff7f3;
+}
+
+.movement-list {
+  display: grid;
+  gap: 10px;
+}
+
+.movement-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+  padding: 12px;
+}
+
+.movement-item strong,
+.movement-item span {
+  display: block;
+}
+
+.movement-item span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.finance-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.finance-card {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: #fbfaf6;
+  padding: 12px;
+}
+
+.finance-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.finance-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .import-box {
@@ -678,6 +831,8 @@ textarea {
   .topbar,
   .field-grid,
   .sheets-form,
+  .module-form,
+  .accounting-filters,
   .catalog-form,
   .import-form,
   .catalog-item,
@@ -687,6 +842,10 @@ textarea {
 
   .status-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-summary {
+    grid-template-columns: 1fr;
   }
 
   .import-form .wide {
