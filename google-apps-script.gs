@@ -7,6 +7,12 @@ function setup() {
 }
 
 function doGet(e) {
+  if (e && e.parameter && e.parameter.action === "write") {
+    const payload = JSON.parse(e.parameter.payload || "{}");
+    const result = handleWrite_(payload);
+    return json_(result, e.parameter.callback);
+  }
+
   const data = {
     ok: true,
     orders: readOrders_(),
@@ -17,23 +23,26 @@ function doGet(e) {
 
 function doPost(e) {
   const payload = JSON.parse(e.postData.contents || "{}");
+  return json_(handleWrite_(payload));
+}
 
+function handleWrite_(payload) {
   if (payload.resource === "catalog") {
     saveCatalog_(payload.catalog || []);
-    return json_({ ok: true, resource: "catalog" });
+    return { ok: true, resource: "catalog" };
   }
 
   if (payload.resource === "order") {
     saveOrder_(payload.order);
-    return json_({ ok: true, resource: "order" });
+    return { ok: true, resource: "order" };
   }
 
   if (payload.orderNumber) {
     saveOrder_(payload);
-    return json_({ ok: true, resource: "order" });
+    return { ok: true, resource: "order" };
   }
 
-  return json_({ ok: false, error: "Recurso no reconocido" });
+  return { ok: false, error: "Recurso no reconocido" };
 }
 
 function saveOrder_(order) {

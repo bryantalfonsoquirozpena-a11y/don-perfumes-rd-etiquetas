@@ -24,6 +24,7 @@ const syncStatus = document.querySelector("#syncStatus");
 const sheetsUrlInput = document.querySelector("#sheetsUrl");
 const saveSheetsUrlBtn = document.querySelector("#saveSheetsUrlBtn");
 const syncSheetsBtn = document.querySelector("#syncSheetsBtn");
+const uploadCatalogBtn = document.querySelector("#uploadCatalogBtn");
 const catalogForm = document.querySelector("#catalogForm");
 const catalogList = document.querySelector("#catalogList");
 const cancelCatalogEditBtn = document.querySelector("#cancelCatalogEditBtn");
@@ -151,15 +152,10 @@ async function postToGoogleSheets(payload, statusMessage) {
 
   setSheetsStatus(statusMessage);
   try {
-    await fetch(url, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    });
+    await jsonp(`${url}?action=write&payload=${encodeURIComponent(JSON.stringify(payload))}`);
     setSheetsStatus("Guardado en Google Sheets");
   } catch (error) {
-    setSheetsStatus("Guardado local, Sheets pendiente");
+    setSheetsStatus("No se pudo guardar en Sheets");
   }
 }
 
@@ -1082,6 +1078,7 @@ saveSheetsUrlBtn.addEventListener("click", () => {
   loadFromGoogleSheets();
 });
 syncSheetsBtn.addEventListener("click", loadFromGoogleSheets);
+uploadCatalogBtn.addEventListener("click", syncCatalogToSheets);
 
 historyList.addEventListener("click", event => {
   const button = event.target.closest("button[data-id]");
