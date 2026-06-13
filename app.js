@@ -1,5 +1,6 @@
 const SIZES = ["5ml", "15ml", "60ml", "120ml"];
 const ORDER_STATUSES = ["Pendiente", "Preparado", "Enviado", "Entregado", "Cancelado"];
+const COST_FIELDS = ["production", "bottle", "label", "packaging", "other"];
 
 // Puedes dejarlo vacio y pegar la URL desde la pantalla de la app.
 const GOOGLE_SHEETS_WEB_APP_URL = "";
@@ -21,6 +22,7 @@ const state = {
   inventoryMovements: readStorage("donPerfumesInventoryMovements", []),
   expenses: readStorage("donPerfumesExpenses", []),
   sales: readStorage("donPerfumesSales", []),
+  sizeCosts: readStorage("donPerfumesSizeCosts", {}),
   currentOrder: null
 };
 
@@ -64,6 +66,7 @@ const inventoryMovementsList = document.querySelector("#inventoryMovementsList")
 const accountingPeriod = document.querySelector("#accountingPeriod");
 const accountingDate = document.querySelector("#accountingDate");
 const financeSummary = document.querySelector("#financeSummary");
+const sizeCostForm = document.querySelector("#sizeCostForm");
 const expenseForm = document.querySelector("#expenseForm");
 const expenseDate = document.querySelector("#expenseDate");
 const expenseCategory = document.querySelector("#expenseCategory");
@@ -73,6 +76,13 @@ const expenseList = document.querySelector("#expenseList");
 const exportAccountingCsvBtn = document.querySelector("#exportAccountingCsvBtn");
 const exportInventoryCsvBtn = document.querySelector("#exportInventoryCsvBtn");
 const exportOrdersCsvBtn = document.querySelector("#exportOrdersCsvBtn");
+const reportSummary = document.querySelector("#reportSummary");
+const orderShippingCost = document.querySelector("#orderShippingCost");
+const orderAdCost = document.querySelector("#orderAdCost");
+const orderMessengerCommission = document.querySelector("#orderMessengerCommission");
+const orderDiscount = document.querySelector("#orderDiscount");
+const orderOtherCost = document.querySelector("#orderOtherCost");
+const orderProfitPreview = document.querySelector("#orderProfitPreview");
 
 const money = new Intl.NumberFormat("es-DO", {
   style: "currency",
@@ -97,6 +107,10 @@ function escapeHtml(value) {
 function appId() {
   if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value || null));
 }
 
 function nextOrderNumber() {
@@ -133,6 +147,10 @@ function saveExpenses() {
 
 function saveSales() {
   localStorage.setItem("donPerfumesSales", JSON.stringify(state.sales));
+}
+
+function saveSizeCosts() {
+  localStorage.setItem("donPerfumesSizeCosts", JSON.stringify(state.sizeCosts));
 }
 
 function sheetsUrl() {
@@ -196,16 +214,21 @@ async function loadFromGoogleSheets() {
     state.inventoryMovements = Array.isArray(data.inventoryMovements) ? data.inventoryMovements : state.inventoryMovements;
     state.expenses = Array.isArray(data.expenses) ? data.expenses : state.expenses;
     state.sales = Array.isArray(data.sales) ? data.sales : state.sales;
+    state.sizeCosts = data.sizeCosts && typeof data.sizeCosts === "object" ? data.sizeCosts : state.sizeCosts;
+    normalizeInventoryTracking();
     saveOrders();
     saveCatalog();
     saveInventory();
     saveExpenses();
     saveSales();
+    saveSizeCosts();
     renderCatalog();
     refreshOrderProductOptions();
     renderInventoryProductOptions();
     renderInventory();
+    renderSizeCosts();
     renderAccounting();
+    renderReports();
     renderHistory();
     resetForm();
     setSheetsStatus("Sincronizado con Google Sheets");
@@ -292,6 +315,13 @@ function syncSaleToSheets(sale) {
   }, "Guardando venta en Sheets...");
 }
 
+function syncSizeCostsToSheets() {
+  postToGoogleSheets({
+    resource: "sizeCosts",
+    sizeCosts: state.sizeCosts
+  }, "Guardando costos en Sheets...");
+}
+
 function normalizeKey(value) {
   return String(value || "")
     .trim()
@@ -309,6 +339,62 @@ function parseMoney(value) {
     .trim();
   const parsed = Number(cleaned || 0);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function sizeCostRecord(size) {
+  if (!state.sizeCosts[size]) {
+    state.sizeCosts[size] = {
+      size,
+      production: 0,
+      bottle: 0,
+      label: 0,
+      packaging: 0,
+      other: 0
+    };
+  }
+  return state.sizeCosts[size];
+}
+
+function sizeCostTotal(size) {
+  const record = sizeCostRecord(size);
+  return COST_FIELDS.reduce((sum, field) => sum + Number(record[field] || 0), 0);
+}
+
+function readOrderCosts() {
+  return {
+    shipping: parseMoney(orderShippingCost?.value),
+    advertising: parseMoney(orderAdCost?.value),
+    messengerCommission: parseMoney(orderMessengerCommission?.value),
+    discount: parseMoney(orderDiscount?.value),
+    other: parseMoney(orderOtherCost?.value)
+  };
+}
+
+function productionCostForOrder(order) {
+  return (order.products || []).reduce((sum, item) => {
+    return sum + Number(item.quantity || 0) * sizeCostTotal(item.size);
+  }, 0);
+}
+
+function orderExtraCosts(order) {
+  const costs = order.orderCosts || {};
+  return Number(costs.shipping || 0)
+    + Number(costs.advertising || 0)
+    + Number(costs.messengerCommission || 0)
+    + Number(costs.discount || 0)
+    + Number(costs.other || 0);
+}
+
+function calculateOrderProfit(order) {
+  const productionCost = productionCostForOrder(order);
+  const extraCosts = orderExtraCosts(order);
+  const totalCost = productionCost + extraCosts;
+  return {
+    productionCost,
+    extraCosts,
+    totalCost,
+    estimatedProfit: Number(order.total || 0) - totalCost
+  };
 }
 
 function parseBoolean(value) {
@@ -603,7 +689,11 @@ function readFormOrder() {
     orderNote: document.querySelector("#orderNote").value.trim(),
     shippingCompany: document.querySelector("#shippingCompany").value.trim(),
     products: validProducts,
-    total: validProducts.reduce((sum, item) => sum + item.subtotal, 0)
+    total: validProducts.reduce((sum, item) => sum + item.subtotal, 0),
+    orderCosts: readOrderCosts(),
+    profitSummary: calculateOrderProfit({ products: validProducts, total: validProducts.reduce((sum, item) => sum + item.subtotal, 0), orderCosts: readOrderCosts() }),
+    inventoryApplied: state.currentOrder?.inventoryApplied === true,
+    inventoryItems: Array.isArray(state.currentOrder?.inventoryItems) ? state.currentOrder.inventoryItems : []
   };
 }
 
@@ -795,6 +885,7 @@ function drawQrToCanvas(text) {
 
 function updatePreview() {
   const order = readFormOrder();
+  const profit = calculateOrderProfit(order);
   document.querySelector("#previewOrder").textContent = order.orderNumber || "DP-00001";
   document.querySelector("#previewName").textContent = order.customerName || "Nombre";
   document.querySelector("#previewPhone").textContent = order.phone || "Telefono";
@@ -810,6 +901,13 @@ function updatePreview() {
   document.querySelector("#previewItems").innerHTML = items.length
     ? items.map(item => `<p class="label-item">${escapeHtml(item.quantity)} x ${escapeHtml(item.product)} ${escapeHtml(item.size)} - ${formatMoney(item.subtotal)}</p>`).join("")
     : `<p class="label-item">Cantidad + producto + tamano</p>`;
+  if (orderProfitPreview) {
+    orderProfitPreview.innerHTML = `
+      <span>Costo produccion: <strong>${formatMoney(profit.productionCost)}</strong></span>
+      <span>Costos pedido: <strong>${formatMoney(profit.extraCosts)}</strong></span>
+      <span>Ganancia estimada: <strong>${formatMoney(profit.estimatedProfit)}</strong></span>
+    `;
+  }
   drawQrToCanvas(order.orderNumber || "DP-00001");
 }
 
@@ -836,12 +934,14 @@ function renderHistory() {
       .filter(product => product.product)
       .map(product => `${product.quantity} x ${product.product} ${product.size}`)
       .join(", ");
+    const profit = orderProfit(order);
 
     item.innerHTML = `
       <div class="history-main">
         <strong>${escapeHtml(order.orderNumber)} · ${escapeHtml(order.customerName || "Sin nombre")}</strong>
         <span class="status-badge status-${normalizeKey(status)}">${escapeHtml(status)}</span>
         <span>${escapeHtml(order.phone || "Sin telefono")} · ${formatMoney(order.total)}</span>
+        <span>Costo: ${formatMoney(profit.totalCost)} / Ganancia: ${formatMoney(profit.estimatedProfit)}</span>
         <span>${escapeHtml(products || "Sin productos")}</span>
         <span>${new Date(order.createdAt).toLocaleString("es-DO")}</span>
       </div>
@@ -898,14 +998,23 @@ function changeOrderStatus(id, status) {
   const order = state.orders.find(saved => saved.id === id);
   if (!order) return;
 
-  order.status = status;
+  const previousOrder = cloneData(order);
+  const nextOrder = {
+    ...cloneData(order),
+    status
+  };
+
+  if (!applyInventoryForOrder(nextOrder, previousOrder)) return;
+
+  Object.assign(order, nextOrder);
   if (state.currentOrder && state.currentOrder.id === id) {
-    state.currentOrder.status = status;
+    Object.assign(state.currentOrder, nextOrder);
     updatePreview();
   }
   saveOrders();
   renderHistory();
   renderAccounting();
+  renderReports();
   syncOrderToSheets(order);
   upsertSaleFromOrder(order);
 }
@@ -916,6 +1025,7 @@ function upsertOrder(order) {
     document.querySelector("#orderNumber").value = order.orderNumber;
   }
 
+  order.profitSummary = calculateOrderProfit(order);
   const existingIndex = state.orders.findIndex(saved => saved.id === order.id);
   if (existingIndex >= 0) {
     state.orders[existingIndex] = order;
@@ -926,6 +1036,7 @@ function upsertOrder(order) {
   saveOrders();
   renderHistory();
   renderAccounting();
+  renderReports();
 }
 
 function loadOrder(order) {
@@ -940,6 +1051,12 @@ function loadOrder(order) {
   document.querySelector("#orderNote").value = order.orderNote || "";
   document.querySelector("#shippingCompany").value = order.shippingCompany || "";
   document.querySelector("#orderNumber").value = order.orderNumber || nextOrderNumber();
+  const costs = order.orderCosts || {};
+  orderShippingCost.value = Number(costs.shipping || 0);
+  orderAdCost.value = Number(costs.advertising || 0);
+  orderMessengerCommission.value = Number(costs.messengerCommission || 0);
+  orderDiscount.value = Number(costs.discount || 0);
+  orderOtherCost.value = Number(costs.other || 0);
   productsList.innerHTML = "";
   (order.products || []).forEach(productRowTemplate);
   if (!order.products?.length) productRowTemplate();
@@ -950,6 +1067,11 @@ function resetForm() {
   state.currentOrder = null;
   form.reset();
   document.querySelector("#orderNumber").value = nextOrderNumber();
+  orderShippingCost.value = 0;
+  orderAdCost.value = 0;
+  orderMessengerCommission.value = 0;
+  orderDiscount.value = 0;
+  orderOtherCost.value = 0;
   productsList.innerHTML = "";
   productRowTemplate();
   updateTotals();
@@ -989,8 +1111,8 @@ function safeFilePart(value) {
   return String(value || "pedido").replace(/[^a-z0-9-]/gi, "");
 }
 
-function generatePdf() {
-  const order = readFormOrder();
+function generatePdf(orderInput = null) {
+  const order = orderInput || readFormOrder();
   const commands = [];
   let y = 405;
   const qrMatrix = makeQrMatrix(order.orderNumber || "DP-00001");
@@ -1107,6 +1229,29 @@ function generatePdf() {
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
+async function confirmOrderAndGenerateLabel() {
+  const order = readFormOrder();
+  if (!order.products.length) {
+    setSheetsStatus("Agrega al menos un producto al pedido");
+    return null;
+  }
+
+  if (isDuplicateOrderNumber(order)) {
+    order.orderNumber = nextOrderNumber();
+    document.querySelector("#orderNumber").value = order.orderNumber;
+  }
+
+  const previousOrder = cloneData(state.orders.find(saved => saved.id === order.id));
+  if (!applyInventoryForOrder(order, previousOrder)) return null;
+
+  upsertOrder(order);
+  upsertSaleFromOrder(order);
+  updatePreview();
+  await syncOrderToSheets(order);
+  generatePdf(order);
+  return order;
+}
+
 function buildWhatsappMessage(order) {
   const products = order.products
     .filter(item => item.product)
@@ -1144,6 +1289,7 @@ function switchTab(tab) {
   });
   if (tab === "inventario") renderInventory();
   if (tab === "contabilidad") renderAccounting();
+  if (tab === "reportes") renderReports();
 }
 
 function inventoryKey(productId, size) {
@@ -1162,16 +1308,17 @@ function productNameById(productId) {
   return findCatalogProduct(productId)?.name || "Producto eliminado";
 }
 
-function addInventoryMovement({ productId, size, type, quantity, note, orderNumber }) {
+function addInventoryMovement({ productId, size, type, quantity, note, orderNumber, sync = true }) {
   const record = stockRecord(productId, size);
   const qty = Math.max(0, Number(quantity || 0));
   const before = Number(record.stock || 0);
   let after = before;
 
-  if (type === "entrada") after = before + qty;
-  if (type === "salida") after = Math.max(0, before - qty);
+  if (["entrada", "devolucion_cancelado", "devolucion_ajuste"].includes(type)) after = before + qty;
+  if (["salida", "ajuste_salida"].includes(type)) after = before - qty;
   if (type === "ajuste") after = qty;
 
+  after = Math.max(0, after);
   record.stock = after;
   state.inventoryMovements.unshift({
     id: appId(),
@@ -1187,24 +1334,158 @@ function addInventoryMovement({ productId, size, type, quantity, note, orderNumb
     orderNumber: orderNumber || ""
   });
   saveInventory();
-  syncInventoryToSheets();
+  if (sync) syncInventoryToSheets();
 }
 
-function registerOrderInventoryExit(order) {
-  (order.products || []).forEach(item => {
+function inventoryItemsFromOrder(order) {
+  const grouped = {};
+  (order?.products || []).forEach(item => {
+    if (!item.productId || !item.size || Number(item.quantity || 0) <= 0) return;
+    const key = inventoryKey(item.productId, item.size);
+    if (!grouped[key]) {
+      grouped[key] = {
+        productId: item.productId,
+        product: item.product || productNameById(item.productId),
+        size: item.size,
+        quantity: 0
+      };
+    }
+    grouped[key].quantity += Number(item.quantity || 0);
+  });
+  return Object.values(grouped);
+}
+
+function inventoryItemsMap(items) {
+  return (items || []).reduce((result, item) => {
+    const key = inventoryKey(item.productId, item.size);
+    result[key] = {
+      productId: item.productId,
+      product: item.product || productNameById(item.productId),
+      size: item.size,
+      quantity: Number(item.quantity || 0)
+    };
+    return result;
+  }, {});
+}
+
+function insufficientInventory(items) {
+  return (items || [])
+    .map(item => {
+      const record = stockRecord(item.productId, item.size);
+      const available = Number(record.stock || 0);
+      const needed = Number(item.quantity || 0);
+      return {
+        ...item,
+        available,
+        needed
+      };
+    })
+    .filter(item => item.needed > item.available);
+}
+
+function showInventoryAlert(items) {
+  const detail = items.map(item => {
+    return `${productNameById(item.productId)} ${item.size}: disponible ${item.available}, necesita ${item.needed}`;
+  }).join("\n");
+  const message = `No hay inventario suficiente para confirmar este pedido.\n\n${detail}`;
+  alert(message);
+  setSheetsStatus("Inventario insuficiente; pedido no confirmado");
+}
+
+function moveInventoryItems(items, type, note, orderNumber) {
+  (items || []).filter(item => Number(item.quantity || 0) > 0).forEach(item => {
     addInventoryMovement({
       productId: item.productId,
       size: item.size,
-      type: "salida",
+      type,
       quantity: item.quantity,
-      note: "Salida automatica por pedido",
-      orderNumber: order.orderNumber
+      note,
+      orderNumber,
+      sync: false
     });
   });
+  saveInventory();
+  syncInventoryToSheets();
   renderInventory();
 }
 
+function applyInventoryForOrder(order, previousOrder = null) {
+  const nextItems = inventoryItemsFromOrder(order);
+  const previousApplied = previousOrder?.inventoryApplied === true;
+  const previousItems = previousApplied
+    ? inventoryItemsFromOrder({ products: previousOrder.inventoryItems || previousOrder.products || [] })
+    : [];
+
+  if (normalizeOrderStatus(order.status) === "Cancelado") {
+    if (previousApplied && previousItems.length) {
+      moveInventoryItems(previousItems, "devolucion_cancelado", "Devolucion automatica por pedido cancelado", order.orderNumber);
+    }
+    order.inventoryApplied = false;
+    order.inventoryItems = [];
+    return true;
+  }
+
+  if (!previousApplied) {
+    const missing = insufficientInventory(nextItems);
+    if (missing.length) {
+      showInventoryAlert(missing);
+      return false;
+    }
+    moveInventoryItems(nextItems, "salida", "Salida automatica por pedido confirmado", order.orderNumber);
+    order.inventoryApplied = true;
+    order.inventoryItems = nextItems;
+    return true;
+  }
+
+  const previousMap = inventoryItemsMap(previousItems);
+  const nextMap = inventoryItemsMap(nextItems);
+  const keys = [...new Set([...Object.keys(previousMap), ...Object.keys(nextMap)])];
+  const extraNeeded = [];
+  const returns = [];
+
+  keys.forEach(key => {
+    const previousItem = previousMap[key] || nextMap[key];
+    const nextItem = nextMap[key] || previousMap[key];
+    const delta = Number(nextMap[key]?.quantity || 0) - Number(previousMap[key]?.quantity || 0);
+    if (delta > 0) {
+      extraNeeded.push({ ...nextItem, quantity: delta });
+    }
+    if (delta < 0) {
+      returns.push({ ...previousItem, quantity: Math.abs(delta) });
+    }
+  });
+
+  const missing = insufficientInventory(extraNeeded);
+  if (missing.length) {
+    showInventoryAlert(missing);
+    return false;
+  }
+
+  moveInventoryItems(extraNeeded, "ajuste_salida", "Ajuste automatico por edicion de pedido", order.orderNumber);
+  moveInventoryItems(returns, "devolucion_ajuste", "Devolucion automatica por edicion de pedido", order.orderNumber);
+  order.inventoryApplied = true;
+  order.inventoryItems = nextItems;
+  return true;
+}
+
+function normalizeInventoryTracking() {
+  let changed = false;
+  state.orders.forEach(order => {
+    const hasTracking = typeof order.inventoryApplied === "boolean";
+    if (!hasTracking) {
+      order.inventoryApplied = normalizeOrderStatus(order.status) !== "Cancelado";
+      order.inventoryItems = order.inventoryApplied ? inventoryItemsFromOrder(order) : [];
+      changed = true;
+    } else if (!Array.isArray(order.inventoryItems)) {
+      order.inventoryItems = order.inventoryApplied ? inventoryItemsFromOrder(order) : [];
+      changed = true;
+    }
+  });
+  if (changed) saveOrders();
+}
+
 function saleFromOrder(order) {
+  const profit = orderProfit(order);
   return {
     id: `sale-${order.id}`,
     orderId: order.id,
@@ -1214,7 +1495,10 @@ function saleFromOrder(order) {
     customerName: order.customerName,
     total: Number(order.total || 0),
     paymentMethod: order.paymentMethod,
-    products: order.products || []
+    products: order.products || [],
+    productionCost: profit.productionCost,
+    orderCosts: order.orderCosts || {},
+    estimatedProfit: profit.estimatedProfit
   };
 }
 
@@ -1301,6 +1585,33 @@ function endOfPeriod(start, period) {
   return end;
 }
 
+function renderSizeCosts() {
+  if (!sizeCostForm) return;
+  const labels = {
+    production: "Produccion",
+    bottle: "Envase",
+    label: "Etiqueta",
+    packaging: "Empaque",
+    other: "Otros"
+  };
+
+  sizeCostForm.innerHTML = SIZES.map(size => {
+    const record = sizeCostRecord(size);
+    return `
+      <fieldset class="size-cost-card" data-size="${size}">
+        <legend>${size}</legend>
+        ${COST_FIELDS.map(field => `
+          <label>
+            <span>${labels[field]}</span>
+            <input class="size-cost-input" data-size="${size}" data-field="${field}" type="number" min="0" step="1" value="${Number(record[field] || 0)}">
+          </label>
+        `).join("")}
+        <div class="size-cost-total">Total: <strong>${formatMoney(sizeCostTotal(size))}</strong></div>
+      </fieldset>
+    `;
+  }).join("");
+}
+
 function inSelectedPeriod(dateText) {
   const base = accountingDate.value ? new Date(`${accountingDate.value}T00:00:00`) : new Date();
   const start = startOfPeriod(base, accountingPeriod.value);
@@ -1319,18 +1630,36 @@ function accountingExpenses() {
   return state.expenses.filter(expense => inSelectedPeriod(expense.date));
 }
 
+function generalAdvertisingExpenses(expenses = state.expenses) {
+  return expenses
+    .filter(expense => normalizeKey(expense.category).includes("publicidad"))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function orderProfit(order) {
+  const calculated = calculateOrderProfit(order);
+  return {
+    ...calculated,
+    ...(order.profitSummary || {})
+  };
+}
+
 function renderAccounting() {
   const orders = accountingOrders();
   const expenses = accountingExpenses();
   const income = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const productionCost = orders.reduce((sum, order) => sum + orderProfit(order).productionCost, 0);
+  const orderCosts = orders.reduce((sum, order) => sum + orderProfit(order).extraCosts, 0);
   const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const profit = income - expenseTotal;
+  const profit = orders.reduce((sum, order) => sum + orderProfit(order).estimatedProfit, 0) - expenseTotal;
   const completed = orders.filter(order => normalizeOrderStatus(order.status) === "Entregado").reduce((sum, order) => sum + Number(order.total || 0), 0);
 
   financeSummary.innerHTML = `
     <div class="finance-card"><span>Ingresos totales</span><strong>${formatMoney(income)}</strong></div>
     <div class="finance-card"><span>Ventas completadas</span><strong>${formatMoney(completed)}</strong></div>
-    <div class="finance-card"><span>Gastos totales</span><strong>${formatMoney(expenseTotal)}</strong></div>
+    <div class="finance-card"><span>Costo produccion</span><strong>${formatMoney(productionCost)}</strong></div>
+    <div class="finance-card"><span>Costos de pedidos</span><strong>${formatMoney(orderCosts)}</strong></div>
+    <div class="finance-card"><span>Costos generales</span><strong>${formatMoney(expenseTotal)}</strong></div>
     <div class="finance-card"><span>Ganancia estimada</span><strong>${formatMoney(profit)}</strong></div>
   `;
 
@@ -1342,6 +1671,58 @@ function renderAccounting() {
       </div>
     `).join("")
     : `<p class="empty-history">Sin gastos registrados.</p>`;
+}
+
+function periodOrders(period, base = new Date()) {
+  const start = startOfPeriod(base, period);
+  const end = endOfPeriod(start, period);
+  return state.orders.filter(order => {
+    const date = new Date(order.createdAt);
+    return normalizeOrderStatus(order.status) !== "Cancelado" && date >= start && date < end;
+  });
+}
+
+function topProductStats(orders) {
+  const stats = {};
+  orders.forEach(order => {
+    (order.products || []).forEach(item => {
+      const key = item.product || productNameById(item.productId);
+      if (!stats[key]) stats[key] = { product: key, quantity: 0, profit: 0 };
+      stats[key].quantity += Number(item.quantity || 0);
+      const unitProfit = Number(item.price || 0) - sizeCostTotal(item.size);
+      stats[key].profit += unitProfit * Number(item.quantity || 0);
+    });
+  });
+  const values = Object.values(stats);
+  return {
+    mostSold: values.slice().sort((a, b) => b.quantity - a.quantity)[0],
+    mostProfitable: values.slice().sort((a, b) => b.profit - a.profit)[0]
+  };
+}
+
+function renderReports() {
+  if (!reportSummary) return;
+  const todayOrders = periodOrders("day");
+  const monthOrders = periodOrders("month");
+  const salesToday = todayOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const profitToday = todayOrders.reduce((sum, order) => sum + orderProfit(order).estimatedProfit, 0);
+  const profitMonth = monthOrders.reduce((sum, order) => sum + orderProfit(order).estimatedProfit, 0);
+  const adSpend = generalAdvertisingExpenses() + state.orders.reduce((sum, order) => sum + Number(order.orderCosts?.advertising || 0), 0);
+  const totalProfit = state.orders
+    .filter(order => normalizeOrderStatus(order.status) !== "Cancelado")
+    .reduce((sum, order) => sum + orderProfit(order).estimatedProfit, 0);
+  const adReturn = adSpend > 0 ? totalProfit / adSpend : 0;
+  const top = topProductStats(monthOrders);
+
+  reportSummary.innerHTML = `
+    <div class="finance-card"><span>Ventas del dia</span><strong>${formatMoney(salesToday)}</strong></div>
+    <div class="finance-card"><span>Ganancia del dia</span><strong>${formatMoney(profitToday)}</strong></div>
+    <div class="finance-card"><span>Ganancia del mes</span><strong>${formatMoney(profitMonth)}</strong></div>
+    <div class="finance-card"><span>Producto mas rentable</span><strong>${escapeHtml(top.mostProfitable?.product || "Sin datos")}</strong></div>
+    <div class="finance-card"><span>Producto mas vendido</span><strong>${escapeHtml(top.mostSold?.product || "Sin datos")}</strong></div>
+    <div class="finance-card"><span>Gasto en publicidad</span><strong>${formatMoney(adSpend)}</strong></div>
+    <div class="finance-card"><span>Retorno publicidad</span><strong>${adSpend > 0 ? `${adReturn.toFixed(2)}x` : "Sin datos"}</strong></div>
+  `;
 }
 
 function csvEscape(value) {
@@ -1359,9 +1740,12 @@ function downloadCsv(filename, rows) {
 }
 
 function exportAccountingCsv() {
-  const rows = [["Tipo", "Fecha", "Detalle", "Estado/Categoria", "Monto"]];
-  accountingOrders().forEach(order => rows.push(["Venta", order.createdAt, order.orderNumber, normalizeOrderStatus(order.status), order.total]));
-  accountingExpenses().forEach(expense => rows.push(["Gasto", expense.date, expense.description, expense.category, expense.amount]));
+  const rows = [["Tipo", "Fecha", "Detalle", "Estado/Categoria", "Monto", "Costo produccion", "Costos pedido", "Ganancia"]];
+  accountingOrders().forEach(order => {
+    const profit = orderProfit(order);
+    rows.push(["Venta", order.createdAt, order.orderNumber, normalizeOrderStatus(order.status), order.total, profit.productionCost, profit.extraCosts, profit.estimatedProfit]);
+  });
+  accountingExpenses().forEach(expense => rows.push(["Gasto", expense.date, expense.description, expense.category, expense.amount, "", "", -Number(expense.amount || 0)]));
   downloadCsv("contabilidad-don-perfumes.csv", rows);
 }
 
@@ -1377,8 +1761,11 @@ function exportInventoryCsv() {
 }
 
 function exportOrdersCsv() {
-  const rows = [["Pedido", "Fecha", "Cliente", "Telefono", "Estado", "Total"]];
-  state.orders.forEach(order => rows.push([order.orderNumber, order.createdAt, order.customerName, order.phone, normalizeOrderStatus(order.status), order.total]));
+  const rows = [["Pedido", "Fecha", "Cliente", "Telefono", "Estado", "Total", "Costo produccion", "Costos pedido", "Ganancia"]];
+  state.orders.forEach(order => {
+    const profit = orderProfit(order);
+    rows.push([order.orderNumber, order.createdAt, order.customerName, order.phone, normalizeOrderStatus(order.status), order.total, profit.productionCost, profit.extraCosts, profit.estimatedProfit]);
+  });
   downloadCsv("pedidos-don-perfumes.csv", rows);
 }
 
@@ -1497,25 +1884,12 @@ form.addEventListener("change", updatePreview);
 
 form.addEventListener("submit", async event => {
   event.preventDefault();
-  const order = readFormOrder();
-  if (!order.products.length) {
-    setSheetsStatus("Agrega al menos un producto al pedido");
-    return;
-  }
-  const isNewOrder = !state.orders.some(saved => saved.id === order.id);
-  upsertOrder(order);
-  if (isNewOrder) {
-    registerOrderInventoryExit(order);
-  }
-  upsertSaleFromOrder(order);
-  updatePreview();
-  await syncOrderToSheets(order);
-  generatePdf();
+  await confirmOrderAndGenerateLabel();
 });
 
 addProductBtn.addEventListener("click", () => productRowTemplate());
 newOrderBtn.addEventListener("click", resetForm);
-downloadPdfBtn.addEventListener("click", generatePdf);
+downloadPdfBtn.addEventListener("click", confirmOrderAndGenerateLabel);
 sendWhatsappBtn.addEventListener("click", sendToWhatsapp);
 printBtn.addEventListener("click", () => window.print());
 tabButtons.forEach(button => {
@@ -1525,6 +1899,21 @@ tabButtons.forEach(button => {
   input.addEventListener("input", renderHistory);
 });
 searchByStatus.addEventListener("change", renderHistory);
+sizeCostForm.addEventListener("submit", event => event.preventDefault());
+sizeCostForm.addEventListener("input", event => {
+  const input = event.target.closest(".size-cost-input");
+  if (!input) return;
+  const record = sizeCostRecord(input.dataset.size);
+  record[input.dataset.field] = parseMoney(input.value);
+  saveSizeCosts();
+  const card = input.closest(".size-cost-card");
+  const total = card?.querySelector(".size-cost-total strong");
+  if (total) total.textContent = formatMoney(sizeCostTotal(input.dataset.size));
+  updatePreview();
+  renderAccounting();
+  renderReports();
+});
+sizeCostForm.addEventListener("change", syncSizeCostsToSheets);
 inventoryForm.addEventListener("submit", event => {
   event.preventDefault();
   if (!inventoryProduct.value) return;
@@ -1555,6 +1944,7 @@ expenseForm.addEventListener("submit", event => {
   expenseForm.reset();
   expenseDate.value = new Date().toISOString().slice(0, 10);
   renderAccounting();
+  renderReports();
 });
 accountingPeriod.addEventListener("change", renderAccounting);
 accountingDate.addEventListener("change", renderAccounting);
@@ -1595,10 +1985,13 @@ historyList.addEventListener("click", event => {
 sheetsUrlInput.value = sheetsUrl();
 accountingDate.value = new Date().toISOString().slice(0, 10);
 expenseDate.value = new Date().toISOString().slice(0, 10);
+normalizeInventoryTracking();
 renderCatalog();
 renderInventoryProductOptions();
 renderInventory();
+renderSizeCosts();
 renderAccounting();
 resetForm();
 renderHistory();
+renderReports();
 if (sheetsUrl()) loadFromGoogleSheets();

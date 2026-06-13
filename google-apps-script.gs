@@ -4,6 +4,7 @@ const INVENTORY_SHEET = "Inventario";
 const INVENTORY_MOVEMENTS_SHEET = "MovimientosInventario";
 const EXPENSES_SHEET = "Gastos";
 const SALES_SHEET = "Ventas";
+const SIZE_COSTS_SHEET = "CostosTamano";
 
 function setup() {
   getSheet_(ORDERS_SHEET, orderHeaders_());
@@ -12,6 +13,7 @@ function setup() {
   getSheet_(INVENTORY_MOVEMENTS_SHEET, inventoryMovementHeaders_());
   getSheet_(EXPENSES_SHEET, expenseHeaders_());
   getSheet_(SALES_SHEET, saleHeaders_());
+  getSheet_(SIZE_COSTS_SHEET, sizeCostHeaders_());
 }
 
 function doGet(e) {
@@ -28,7 +30,8 @@ function doGet(e) {
     inventory: readInventory_(),
     inventoryMovements: readInventoryMovements_(),
     expenses: readExpenses_(),
-    sales: readSales_()
+    sales: readSales_(),
+    sizeCosts: readSizeCosts_()
   };
   return json_(data, e && e.parameter && e.parameter.callback);
 }
@@ -62,6 +65,11 @@ function handleWrite_(payload) {
   if (payload.resource === "sale") {
     saveSale_(payload.sale);
     return { ok: true, resource: "sale" };
+  }
+
+  if (payload.resource === "sizeCosts") {
+    saveSizeCosts_(payload.sizeCosts || {});
+    return { ok: true, resource: "sizeCosts" };
   }
 
   if (payload.orderNumber) {
@@ -180,6 +188,31 @@ function saveExpenses_(expenses) {
   });
 }
 
+function saveSizeCosts_(sizeCosts) {
+  const sheet = getSheet_(SIZE_COSTS_SHEET, sizeCostHeaders_());
+  sheet.clearContents();
+  sheet.appendRow(sizeCostHeaders_());
+
+  Object.keys(sizeCosts || {}).forEach(size => {
+    const item = sizeCosts[size] || {};
+    const total = Number(item.production || 0)
+      + Number(item.bottle || 0)
+      + Number(item.label || 0)
+      + Number(item.packaging || 0)
+      + Number(item.other || 0);
+    sheet.appendRow([
+      size,
+      Number(item.production || 0),
+      Number(item.bottle || 0),
+      Number(item.label || 0),
+      Number(item.packaging || 0),
+      Number(item.other || 0),
+      total,
+      JSON.stringify(item)
+    ]);
+  });
+}
+
 function saveSale_(sale) {
   if (!sale || !sale.id) return;
 
@@ -194,6 +227,8 @@ function saveSale_(sale) {
     sale.customerName,
     Number(sale.total || 0),
     sale.paymentMethod,
+    Number(sale.productionCost || 0),
+    Number(sale.estimatedProfit || 0),
     JSON.stringify(sale.products || []),
     JSON.stringify(sale)
   ]];
@@ -375,6 +410,37 @@ function readExpenses_() {
   }).filter(item => item && item.id);
 }
 
+function readSizeCosts_() {
+  const sheet = getSheet_(SIZE_COSTS_SHEET, sizeCostHeaders_());
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return {};
+
+  const headers = values[0];
+  const jsonIndex = headers.indexOf("JSON");
+  const result = {};
+
+  values.slice(1).forEach(row => {
+    const size = row[0];
+    if (!size) return;
+    if (jsonIndex >= 0 && row[jsonIndex]) {
+      try {
+        result[size] = JSON.parse(row[jsonIndex]);
+        return;
+      } catch (error) {}
+    }
+    result[size] = {
+      size: size,
+      production: Number(row[1] || 0),
+      bottle: Number(row[2] || 0),
+      label: Number(row[3] || 0),
+      packaging: Number(row[4] || 0),
+      other: Number(row[5] || 0)
+    };
+  });
+
+  return result;
+}
+
 function readSales_() {
   const sheet = getSheet_(SALES_SHEET, saleHeaders_());
   const values = sheet.getDataRange().getValues();
@@ -397,6 +463,8 @@ function readSales_() {
       customerName: row[5],
       total: Number(row[6] || 0),
       paymentMethod: row[7],
+      productionCost: Number(row[8] || 0),
+      estimatedProfit: Number(row[9] || 0),
       products: []
     };
   }).filter(item => item && item.id);
@@ -518,7 +586,22 @@ function saleHeaders_() {
     "Cliente",
     "Total",
     "Metodo de pago",
+    "Costo produccion",
+    "Ganancia estimada",
     "Productos JSON",
+    "JSON"
+  ];
+}
+
+function sizeCostHeaders_() {
+  return [
+    "Tamano",
+    "Costo produccion",
+    "Costo envase",
+    "Costo etiqueta",
+    "Costo empaque",
+    "Otros costos",
+    "Costo total",
     "JSON"
   ];
 }

@@ -193,6 +193,36 @@ h2 {
   align-items: end;
 }
 
+.cost-size-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.size-cost-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+  padding: 12px;
+}
+
+.size-cost-card legend {
+  padding: 0 6px;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.size-cost-total {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  font-weight: 800;
+}
+
 .module-form .wide {
   grid-column: 1 / -1;
 }
@@ -275,7 +305,7 @@ h2 {
 
 .finance-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px;
   margin: 14px 0;
 }
@@ -305,6 +335,31 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.profit-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.profit-strip span {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: #fbfaf6;
+  padding: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.profit-strip strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 17px;
 }
 
 .import-box {
@@ -833,6 +888,8 @@ textarea {
   .sheets-form,
   .module-form,
   .accounting-filters,
+  .cost-size-grid,
+  .profit-strip,
   .catalog-form,
   .import-form,
   .catalog-item,
@@ -845,6 +902,10 @@ textarea {
   }
 
   .finance-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .size-cost-card {
     grid-template-columns: 1fr;
   }
 

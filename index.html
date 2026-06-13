@@ -162,6 +162,35 @@
           </div>
         </section>
 
+        <section class="form-section">
+          <div class="section-heading">
+            <h2>Costos del pedido</h2>
+          </div>
+          <div class="field-grid">
+            <label>
+              <span>Costo de envio</span>
+              <input id="orderShippingCost" type="number" min="0" step="1" value="0">
+            </label>
+            <label>
+              <span>Publicidad asignada</span>
+              <input id="orderAdCost" type="number" min="0" step="1" value="0">
+            </label>
+            <label>
+              <span>Comision mensajero</span>
+              <input id="orderMessengerCommission" type="number" min="0" step="1" value="0">
+            </label>
+            <label>
+              <span>Descuento aplicado</span>
+              <input id="orderDiscount" type="number" min="0" step="1" value="0">
+            </label>
+            <label>
+              <span>Otro gasto del pedido</span>
+              <input id="orderOtherCost" type="number" min="0" step="1" value="0">
+            </label>
+          </div>
+          <div class="profit-strip" id="orderProfitPreview"></div>
+        </section>
+
         <div class="action-bar">
           <button class="primary-btn" type="submit">Generar etiqueta</button>
           <button class="ghost-btn" type="button" id="newOrderBtn">Nuevo pedido</button>
@@ -221,6 +250,10 @@
         <div class="section-heading">
           <h2>Contabilidad basica</h2>
         </div>
+        <div class="section-heading compact-heading">
+          <h3>Costos por Tamano</h3>
+        </div>
+        <form class="cost-size-grid" id="sizeCostForm"></form>
         <div class="accounting-filters">
           <label>
             <span>Periodo</span>
@@ -243,7 +276,15 @@
           </label>
           <label>
             <span>Categoria</span>
-            <input id="expenseCategory" placeholder="Publicidad, envio, compra" required>
+            <select id="expenseCategory" required>
+              <option value="Publicidad diaria">Publicidad diaria</option>
+              <option value="Alquiler">Alquiler</option>
+              <option value="Internet">Internet</option>
+              <option value="Transporte">Transporte</option>
+              <option value="Materiales">Materiales</option>
+              <option value="Sueldos / comisiones">Sueldos / comisiones</option>
+              <option value="Otros gastos">Otros gastos</option>
+            </select>
           </label>
           <label>
             <span>Monto</span>
@@ -265,6 +306,7 @@
         <div class="section-heading">
           <h2>Reportes</h2>
         </div>
+        <div class="finance-summary" id="reportSummary"></div>
         <div class="report-actions">
           <button class="primary-btn" type="button" id="exportAccountingCsvBtn">Exportar contabilidad CSV</button>
           <button class="secondary-btn" type="button" id="exportInventoryCsvBtn">Exportar inventario CSV</button>
